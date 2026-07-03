@@ -1,0 +1,207 @@
+{
+  "agents": {
+    "EntryAgent": {
+      "agentName": "EntryAgent",
+      "description": "Primary dispatcher and intent classifier",
+      "runtime": "ollama",
+      "model": "phi4-mini:latest",
+      "endpoint": "http://${APLUS_TAILSCALE_HOST}:${APLUS_OLLAMA_PORT}",
+      "capabilities": ["intent_classification", "routing", "quick_answers"],
+      "costModel": "local_free",
+      "healthCheck": "/api/tags",
+      "fallbacks": {
+        "cloud": "claude-3-opus"
+      }
+    },
+    "ReasoningAgent": {
+      "agentName": "ReasoningAgent",
+      "description": "Heavy reasoning tasks requiring deep chain-of-thought",
+      "runtime": "lmstudio",
+      "model": "phi-4-reasoning-plus-Q4_K_M.gguf",
+      "endpoint": "http://${APLUS_TAILSCALE_HOST}:${APLUS_LMSTUDIO_PORT}",
+      "capabilities": ["reasoning", "analysis", "architecture", "planning", "problem_solving"],
+      "costModel": "local_free",
+      "healthCheck": "/health",
+      "requiresManualLoad": true,
+      "fallbacks": {
+        "local": "cloud_heavy_reasoning",
+        "cloud": "claude-3-opus"
+      }
+    },
+    "StatsAgent": {
+      "agentName": "StatsAgent",
+      "description": "Statistical analysis, forecasting, probability modeling",
+      "runtime": "lmstudio",
+      "model": "deepseek-r1-14b-Q4_K_M.gguf",
+      "endpoint": "http://${APLUS_TAILSCALE_HOST}:${APLUS_LMSTUDIO_PORT}",
+      "capabilities": ["statistics", "math_reasoning", "forecasting", "analysis"],
+      "costModel": "local_free",
+      "healthCheck": "/health",
+      "requiresManualLoad": true,
+      "fallbacks": {
+        "local": "deepseek-math:7b",
+        "cloud": "claude-3-opus"
+      }
+    },
+    "RagAgent": {
+      "agentName": "RagAgent",
+      "description": "Document QA, retrieval, summarization, long-context reasoning",
+      "runtime": "ollama",
+      "model": "phi3:3.8b",
+      "endpoint": "http://${APLUS_TAILSCALE_HOST}:${APLUS_OLLAMA_PORT}",
+      "capabilities": ["rag", "document_qa", "summarization", "long_context"],
+      "costModel": "local_free",
+      "healthCheck": "/api/tags",
+      "toolsRequired": ["chromadb"],
+      "fallbacks": {
+        "local": "qwen2.5-14b-instruct",
+        "cloud": "claude-3-opus"
+      }
+    },
+    "CodingAgent": {
+      "agentName": "CodingAgent",
+      "description": "Medium coding tasks, refactoring, debugging",
+      "runtime": "ollama",
+      "model": "deepseek-coder:latest",
+      "endpoint": "http://${APLUS_TAILSCALE_HOST}:${APLUS_OLLAMA_PORT}",
+      "capabilities": ["coding", "refactor", "debug", "code_review"],
+      "costModel": "local_free",
+      "healthCheck": "/api/tags",
+      "fallbacks": {
+        "cloud": "claude-3-opus"
+      }
+    },
+    "MathAgent": {
+      "agentName": "MathAgent",
+      "description": "Math-heavy workflows, algorithm design, symbolic reasoning",
+      "runtime": "ollama",
+      "model": "deepseek-math:7b",
+      "endpoint": "http://${APLUS_TAILSCALE_HOST}:${APLUS_OLLAMA_PORT}",
+      "capabilities": ["math", "algorithms", "symbolic_reasoning"],
+      "costModel": "local_free",
+      "healthCheck": "/api/tags",
+      "fallbacks": {
+        "cloud": "claude-3-opus"
+      }
+    },
+    "ImageAgentHigh": {
+      "agentName": "ImageAgentHigh",
+      "description": "High-quality image generation",
+      "runtime": "ollama",
+      "model": "llama3.1:8b",
+      "endpoint": "http://${APLUS_TAILSCALE_HOST}:${APLUS_OLLAMA_PORT}",
+      "capabilities": ["image_generation"],
+      "costModel": "local_free",
+      "healthCheck": "/api/tags",
+      "fallbacks": {
+        "local": "dolphin-nemo:12b",
+        "cloud": "claude-3-opus"
+      }
+    },
+    "ImageAgentLow": {
+      "agentName": "ImageAgentLow",
+      "description": "Fast draft image generation",
+      "runtime": "ollama",
+      "model": "dolphin-nemo:12b",
+      "endpoint": "http://${APLUS_TAILSCALE_HOST}:${APLUS_OLLAMA_PORT}",
+      "capabilities": ["image_generation_fast"],
+      "costModel": "local_free",
+      "healthCheck": "/api/tags",
+      "fallbacks": {
+        "local": "llama3.1:8b",
+        "cloud": "claude-3-opus"
+      }
+    },
+    "SpeechAgent": {
+      "agentName": "SpeechAgent",
+      "description": "Speech-to-text transcription",
+      "runtime": "ollama",
+      "model": "whisper-large:latest",
+      "endpoint": "http://${APLUS_TAILSCALE_HOST}:${APLUS_OLLAMA_PORT}",
+      "capabilities": ["stt"],
+      "costModel": "local_free",
+      "healthCheck": "/api/tags",
+      "fallbacks": {
+        "cloud": "whisper-1"
+      }
+    },
+    "TTSAgent": {
+      "agentName": "TTSAgent",
+      "description": "Text-to-speech synthesis",
+      "runtime": "xtts",
+      "model": "xtts-v2",
+      "endpoint": "http://${APLUS_TAILSCALE_HOST}:${APLUS_XTTS_PORT}",
+      "capabilities": ["tts"],
+      "costModel": "local_free",
+      "healthCheck": "/health",
+      "fallbacks": {
+        "cloud": "gpt-4o-mini-tts"
+      }
+    },
+    "VisionAgent": {
+      "agentName": "VisionAgent",
+      "description": "Image reasoning and multimodal analysis",
+      "runtime": "lmstudio",
+      "model": "phi-4-reasoning-plus-vision-Q4_K_M.gguf",
+      "endpoint": "http://${APLUS_TAILSCALE_HOST}:${APLUS_LMSTUDIO_PORT}",
+      "capabilities": ["vision_reasoning", "multimodal"],
+      "costModel": "local_free",
+      "healthCheck": "/health",
+      "requiresManualLoad": true,
+      "fallbacks": {
+        "cloud": "gpt-4o"
+      }
+    },
+    "CloudAgent": {
+      "agentName": "CloudAgent",
+      "description": "Unified cloud routing for Azure and Anthropic models",
+      "runtime": "cloud",
+      "endpoint": "multi",
+      "model": "dynamic",
+      "capabilities": ["cloud_reasoning", "cloud_design", "cloud_cowork", "cloud_code"],
+      "costModel": "cloud_tracked",
+      "routes": {
+        "heavy_reasoning": {
+          "provider": "anthropic",
+          "model": "claude-3-opus-20250219"
+        },
+        "fallback_reasoning": {
+          "provider": "azure",
+          "model": "gpt-4.1"
+        },
+        "vision": {
+          "provider": "azure",
+          "model": "gpt-4o"
+        },
+        "design": {
+          "provider": "anthropic",
+          "model": "claude-3-sonnet-20250514"
+        },
+        "cowork": {
+          "provider": "anthropic",
+          "model": "claude-3-opus-20250219"
+        },
+        "major_code": {
+          "provider": "anthropic",
+          "model": "claude-3-opus-20250219"
+        },
+        "creative": {
+          "provider": "anthropic",
+          "model": "claude-3-haiku-20250307"
+        },
+        "mid_reasoning": {
+          "provider": "anthropic",
+          "model": "claude-3-sonnet-20250514"
+        },
+        "stt": {
+          "provider": "azure",
+          "model": "whisper-1"
+        },
+        "tts": {
+          "provider": "azure",
+          "model": "gpt-4o-mini-tts"
+        }
+      }
+    }
+  }
+}

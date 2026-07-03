@@ -1,0 +1,45 @@
+{
+  "name": "tw-localllm-orchestrator",
+  "version": "1.0.0",
+  "description": "APlus Local LLM Orchestration System — Express.js orchestrator routing across LM Studio, Ollama, XTTS, ONNX, and ChromaDB",
+  "main": "dist/server.js",
+  "scripts": {
+    "start": "node dist/server.js",
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "llm",
+    "orchestrator",
+    "ollama",
+    "lmstudio",
+    "xtts",
+    "chromadb",
+    "ai",
+    "local-inference"
+  ],
+  "author": "AplUSAndmINUS",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "axios": "^1.7.9",
+    "chromadb": "^1.9.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
+    "morgan": "^1.10.0",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/morgan": "^1.9.10",
+    "@types/node": "^26.1.0",
+    "@types/uuid": "^10.0.0",
+    "tsx": "^4.22.5",
+    "typescript": "^6.0.3"
+  }
+}

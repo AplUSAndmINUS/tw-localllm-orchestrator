@@ -1,0 +1,14 @@
+version: "3.9"
+
+services:
+  onnx-runtime:
+    image: mcr.microsoft.com/onnxruntime/server:latest
+    container_name: aplus-onnx
+    restart: unless-stopped
+    ports:
+      - "${APLUS_ONNX_PORT:-8001}:8001"
+    volumes:
+      - onnx_models:/models
+
+volumes:
+  onnx_models:

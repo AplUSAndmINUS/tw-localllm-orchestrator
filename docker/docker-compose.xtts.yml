@@ -1,0 +1,15 @@
+version: "3.9"
+
+services:
+  xtts:
+    image: ghcr.io/coqui-ai/xtts:latest
+    container_name: aplus-xtts
+    restart: unless-stopped
+    ports:
+      - "${APLUS_XTTS_PORT:-5002}:5002"
+    volumes:
+      - xtts_data:/data
+      - ./config/voices:/app/voices:ro
+
+volumes:
+  xtts_data:
