@@ -1,0 +1,83 @@
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+.env.production.local
+.env.test.local
+
+# API Keys & Credentials
+*.key
+*.pem
+*.p12
+*.pfx
+*.p8
+*.crt
+*.cert
+secrets/
+config/secrets/
+.aws/
+.azure/
+
+# Private Configuration
+config/private/
+config/voices/
+config/models/local/
+
+# Node.js
+node_modules/
+npm-debug.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# IDE & Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# OS
+.env.swp
+.DS_Store
+.AppleDouble
+.LSOverride
+*.db
+
+# Logs
+logs/
+*.log
+lerna-debug.log*
+
+# Build & Dist
+dist/
+build/
+out/
+
+# Docker volumes (local data)
+ollama_models/
+xtts_data/
+onnx_models/
+chromadb_data/
+postgres_data/
+
+# ChromaDB local persistence
+chroma/
+chroma_index/
+
+# Temporary files
+temp/
+tmp/
+*.tmp
+
+# Testing
+coverage/
+.nyc_output/
+
+# Cache
+.cache/
+.eslintcache
