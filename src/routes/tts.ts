@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import ttsAgent from '../agents/ttsAgent';
+import * as containerManager from '../tools/containerManager';
 import logger from '../tools/logger';
 
 async function ttsRoute(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -10,6 +11,9 @@ async function ttsRoute(req: Request, res: Response, next: NextFunction): Promis
       res.status(400).json({ error: 'bad_request', message: 'text is required' });
       return;
     }
+
+    await containerManager.ensureRunning('xtts');
+    containerManager.recordActivity('xtts');
 
     const result = await ttsAgent.execute({
       text,

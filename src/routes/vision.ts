@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import visionAgent from '../agents/visionAgent';
+import * as containerManager from '../tools/containerManager';
 import logger from '../tools/logger';
 import { ChatMessage } from '../types';
 
@@ -21,6 +22,9 @@ async function visionRoute(req: Request, res: Response, next: NextFunction): Pro
       res.status(400).json({ error: 'bad_request', message: 'messages, or image+prompt, required' });
       return;
     }
+
+    await containerManager.ensureRunning('ollama');
+    containerManager.recordActivity('ollama');
 
     const result = await visionAgent.execute({ messages: inputMessages, options });
 

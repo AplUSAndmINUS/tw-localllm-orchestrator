@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import imageAgentHigh from '../agents/imageAgentHigh';
 import imageAgentLow from '../agents/imageAgentLow';
+import * as containerManager from '../tools/containerManager';
 import logger from '../tools/logger';
 
 async function imageRoute(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -13,6 +14,9 @@ async function imageRoute(req: Request, res: Response, next: NextFunction): Prom
       res.status(400).json({ error: 'bad_request', message: 'messages or prompt is required' });
       return;
     }
+
+    await containerManager.ensureRunning('ollama');
+    containerManager.recordActivity('ollama');
 
     const agent = quality === 'low' ? imageAgentLow : imageAgentHigh;
     const result = await agent.execute({ messages: inputMessages, options });

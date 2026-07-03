@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import speechAgent from '../agents/speechAgent';
+import * as containerManager from '../tools/containerManager';
 import logger from '../tools/logger';
 
 async function sttRoute(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -10,6 +11,9 @@ async function sttRoute(req: Request, res: Response, next: NextFunction): Promis
       res.status(400).json({ error: 'bad_request', message: 'audio data is required (base64 encoded)' });
       return;
     }
+
+    await containerManager.ensureRunning('ollama');
+    containerManager.recordActivity('ollama');
 
     const result = await speechAgent.execute({
       prompt: audio,

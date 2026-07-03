@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import ragAgent from '../agents/ragAgent';
 import * as ragTool from '../tools/rag';
+import * as containerManager from '../tools/containerManager';
 import logger from '../tools/logger';
 
 async function ragRoute(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -25,6 +26,11 @@ async function handleQuery(req: Request, res: Response): Promise<void> {
     res.status(400).json({ error: 'bad_request', message: 'query or messages required' });
     return;
   }
+
+  await containerManager.ensureRunning('ollama');
+  await containerManager.ensureRunning('chromadb');
+  containerManager.recordActivity('ollama');
+  containerManager.recordActivity('chromadb');
 
   const collectionName = collection || (agentId ? `${agentId}_${namespace || 'default'}` : 'default');
   const queryText = query || messages[messages.length - 1].content;
@@ -58,6 +64,9 @@ async function handleIngest(req: Request, res: Response): Promise<void> {
     res.status(400).json({ error: 'bad_request', message: 'documents array is required for ingestion' });
     return;
   }
+
+  await containerManager.ensureRunning('chromadb');
+  containerManager.recordActivity('chromadb');
 
   const collectionName = collection || (agentId ? `${agentId}_${namespace || 'default'}` : 'default');
 

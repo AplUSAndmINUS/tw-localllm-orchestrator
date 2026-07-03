@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import codingAgent from '../agents/codingAgent';
+import * as containerManager from '../tools/containerManager';
 import logger from '../tools/logger';
 
 async function codeRoute(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -16,6 +17,9 @@ async function codeRoute(req: Request, res: Response, next: NextFunction): Promi
     if (language) {
       options.language = language;
     }
+
+    await containerManager.ensureRunning('ollama');
+    containerManager.recordActivity('ollama');
 
     const result = await codingAgent.execute({ messages: inputMessages, options });
 

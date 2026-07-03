@@ -1,5 +1,6 @@
 import * as lmstudio from '../models/lmstudio';
 import * as ollama from '../models/ollama';
+import * as containerManager from '../tools/containerManager';
 import config from '../config';
 import logger from '../tools/logger';
 import { AgentResponse, AgentMetadata, AgentExecuteParams, ChatMessage, Agent, OllamaResponse, LMStudioResponse } from '../types';
@@ -30,6 +31,8 @@ async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> 
       response = await lmstudio.chat(chatMessages, { model: MODEL, ...options });
     } else if (config.lmstudio.allowFallback) {
       logger.warn('ReasoningAgent falling back to Ollama', { reason: available ? 'model not loaded' : 'LM Studio unavailable' });
+      await containerManager.ensureRunning('ollama');
+      containerManager.recordActivity('ollama');
       usedRuntime = 'ollama';
       usedModel = FALLBACK_MODEL;
       response = await ollama.chat(FALLBACK_MODEL, chatMessages, options);

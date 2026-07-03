@@ -22,7 +22,7 @@ import modelsRoute from './routes/models';
 import agentsRoute from './routes/agents';
 
 import { startHealthPolling } from './tools/health';
-import { startIdlePolling } from './tools/containerManager';
+import { startIdlePolling, stopIdlePolling } from './tools/containerManager';
 import containersRoute from './routes/containers';
 
 const app: Application = express();
@@ -75,5 +75,14 @@ app.listen(PORT, HOST, () => {
   startIdlePolling();
   logger.info('Container idle polling started');
 });
+
+function shutdown(signal: string): void {
+  logger.info(`Received ${signal}, shutting down gracefully`);
+  stopIdlePolling();
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 export default app;
