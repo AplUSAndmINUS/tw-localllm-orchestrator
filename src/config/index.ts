@@ -2,6 +2,8 @@ import path from 'path';
 import dotenv from 'dotenv';
 import { AppConfig } from '../types';
 
+const PROJECT_ROOT = path.resolve(__dirname, '../..');
+
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 function resolveEndpoint(envKey: string, tailscaleHost: string, port: string): string {
@@ -61,6 +63,17 @@ const config: AppConfig = {
   logging: {
     level: process.env.LOG_LEVEL || 'info',
     structured: process.env.APLUS_STRUCTURED_LOGGING === 'true',
+  },
+
+  containers: {
+    composePath: process.env.APLUS_COMPOSE_PATH || path.join(PROJECT_ROOT, 'docker'),
+    idleTimeoutMs: parseInt(process.env.APLUS_CONTAINER_IDLE_TIMEOUT_MS || '600000', 10),
+    startupTimeoutMs: parseInt(process.env.APLUS_CONTAINER_STARTUP_TIMEOUT_MS || '120000', 10),
+    healthCheckRetries: parseInt(process.env.APLUS_CONTAINER_HEALTH_RETRIES || '10', 10),
+    healthCheckIntervalMs: parseInt(process.env.APLUS_CONTAINER_HEALTH_INTERVAL_MS || '3000', 10),
+    autoStart: process.env.APLUS_CONTAINER_AUTO_START !== 'false',
+    autoStop: process.env.APLUS_CONTAINER_AUTO_STOP !== 'false',
+    gpuSaturationThreshold: parseInt(process.env.APLUS_GPU_SATURATION_THRESHOLD || '90', 10),
   },
 };
 

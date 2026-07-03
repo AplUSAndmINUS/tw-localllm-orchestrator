@@ -10,7 +10,17 @@ import imageAgentLow from '../agents/imageAgentLow';
 import visionAgent from '../agents/visionAgent';
 import cloudAgent from '../agents/cloudAgent';
 import logger from '../tools/logger';
-import { Agent, ClassifyingAgent } from '../types';
+import * as containerManager from '../tools/containerManager';
+import { Agent, ClassifyingAgent, ContainerService } from '../types';
+
+const INTENT_CONTAINER_MAP: Record<string, ContainerService> = {
+  reasoning_heavy: 'ollama',
+  stats: 'ollama',
+  rag: 'ollama',
+  coding: 'ollama',
+  math: 'ollama',
+  general: 'ollama',
+};
 
 const AGENT_MAP: Record<string, Agent> = {
   reasoning_heavy: reasoningAgent,
@@ -52,6 +62,20 @@ async function chatRoute(req: Request, res: Response, next: NextFunction): Promi
     }
 
     const selectedAgent = AGENT_MAP[intent!] || entryAgent;
+
+    const requiredContainer = INTENT_CONTAINER_MAP[intent!];
+    if (requiredContainer) {
+      if (containerManager.isGpuSaturated() && AGENT_MAP['cloud']) {
+        logger.info('GPU saturated, routing to cloud', { intent });
+        const cloudResult = await AGENT_MAP['cloud'].execute({ messages, options, cloudIntent: intent });
+        if (classification) cloudResult.classification = classification;
+        res.json(cloudResult);
+        return;
+      }
+      await containerManager.ensureRunning(requiredContainer);
+      containerManager.recordActivity(requiredContainer);
+    }
+
     const result = await selectedAgent.execute({ messages, options });
 
     if (!result) {

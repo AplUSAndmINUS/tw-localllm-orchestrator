@@ -22,6 +22,8 @@ import modelsRoute from './routes/models';
 import agentsRoute from './routes/agents';
 
 import { startHealthPolling } from './tools/health';
+import { startIdlePolling } from './tools/containerManager';
+import containersRoute from './routes/containers';
 
 const app: Application = express();
 
@@ -48,6 +50,12 @@ app.post('/v1/code', codeRoute);
 app.post('/v1/vision', visionRoute);
 app.post('/v1/cloud', cloudRoute);
 
+app.get('/v1/containers', containersRoute.list);
+app.post('/v1/containers/:service/start', containersRoute.start);
+app.post('/v1/containers/:service/stop', containersRoute.stop);
+app.post('/v1/containers/:service/restart', containersRoute.restart);
+app.get('/v1/gpu', containersRoute.gpu);
+
 app.use(errorHandler);
 
 const PORT = config.server.port;
@@ -64,6 +72,8 @@ app.listen(PORT, HOST, () => {
     chromadb: config.endpoints.chromadb,
   });
   startHealthPolling();
+  startIdlePolling();
+  logger.info('Container idle polling started');
 });
 
 export default app;

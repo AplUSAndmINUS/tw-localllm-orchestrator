@@ -4,13 +4,19 @@ services:
   ollama:
     image: ollama/ollama:latest
     container_name: aplus-ollama
-    restart: unless-stopped
+    restart: "no"
     ports:
       - "${APLUS_OLLAMA_PORT:-11434}:11434"
     volumes:
       - ollama_models:/root/.ollama
     environment:
       - OLLAMA_HOST=0.0.0.0
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     deploy:
       resources:
         reservations:
@@ -22,30 +28,42 @@ services:
   xtts:
     image: ghcr.io/coqui-ai/xtts:latest
     container_name: aplus-xtts
-    restart: unless-stopped
+    restart: "no"
     ports:
       - "${APLUS_XTTS_PORT:-5002}:5002"
     volumes:
       - xtts_data:/data
       - ./config/voices:/app/voices:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5002/docs"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     networks:
       - aplus
 
   onnx-runtime:
     image: mcr.microsoft.com/onnxruntime/server:latest
     container_name: aplus-onnx
-    restart: unless-stopped
+    restart: "no"
     ports:
       - "${APLUS_ONNX_PORT:-8001}:8001"
     volumes:
       - onnx_models:/models
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     networks:
       - aplus
 
   chromadb:
     image: chromadb/chroma:latest
     container_name: aplus-chromadb
-    restart: unless-stopped
+    restart: "no"
     ports:
       - "${APLUS_CHROMADB_PORT:-8000}:8000"
     volumes:
@@ -53,6 +71,12 @@ services:
     environment:
       - IS_PERSISTENT=TRUE
       - ANONYMIZED_TELEMETRY=FALSE
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     networks:
       - aplus
 

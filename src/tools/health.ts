@@ -3,9 +3,10 @@ import * as lmstudio from '../models/lmstudio';
 import * as xtts from '../models/xtts';
 import * as onnx from '../models/onnx';
 import * as rag from './rag';
+import * as containerManager from './containerManager';
 import config from '../config';
 import logger from '../tools/logger';
-import { HealthReport, ServiceHealth } from '../types';
+import { HealthReport, ServiceHealth, ContainerService } from '../types';
 
 let lastHealth: HealthReport | null = null;
 let pollingInterval: ReturnType<typeof setInterval> | null = null;
@@ -41,6 +42,22 @@ async function checkAll(): Promise<HealthReport> {
 
   if (!services.lmstudio.healthy) {
     services.lmstudio.note = 'LM Studio offline or no model loaded';
+  }
+
+  if (config.containers.autoStart) {
+    const serviceMap: Array<[keyof HealthReport['services'], ContainerService]> = [
+      ['ollama', 'ollama'],
+      ['xtts', 'xtts'],
+      ['onnx', 'onnx-runtime'],
+      ['chromadb', 'chromadb'],
+    ];
+    for (const [key, containerService] of serviceMap) {
+      if (!services[key].healthy) {
+        containerManager.ensureRunning(containerService).catch(err =>
+          logger.warn('Auto-start failed during health check', { service: containerService, error: (err as Error).message })
+        );
+      }
+    }
   }
 
   const result: HealthReport = {

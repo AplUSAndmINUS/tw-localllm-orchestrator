@@ -145,6 +145,36 @@ export interface AnthropicResponse {
   };
 }
 
+export type ContainerService = 'ollama' | 'xtts' | 'onnx-runtime' | 'chromadb';
+
+export interface ContainerStatus {
+  service: ContainerService;
+  containerName: string;
+  running: boolean;
+  healthy: boolean;
+  uptime?: string;
+  startedAt?: string;
+}
+
+export interface ContainerManagerConfig {
+  composePath: string;
+  idleTimeoutMs: number;
+  startupTimeoutMs: number;
+  healthCheckRetries: number;
+  healthCheckIntervalMs: number;
+  autoStart: boolean;
+  autoStop: boolean;
+  gpuSaturationThreshold: number;
+}
+
+export interface GpuStatus {
+  available: boolean;
+  utilizationPercent: number;
+  memoryUsedMb: number;
+  memoryTotalMb: number;
+  saturated: boolean;
+}
+
 export interface AppConfig {
   server: {
     port: number;
@@ -186,4 +216,5 @@ export interface AppConfig {
     level: string;
     structured: boolean;
   };
+  containers: ContainerManagerConfig;
 }
