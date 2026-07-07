@@ -85,7 +85,7 @@ The main `docker-compose.yml` (in the `docker` folder) defines four services:
 | Service | Container Name | Image | Default Port | What It Does |
 |---|---|---|---|---|
 | **ollama** | `aplus-ollama` | `ollama/ollama:latest` | 11434 | Runs local LLMs (like phi4-mini) |
-| **xtts** | `aplus-xtts` | `ghcr.io/coqui-ai/xtts-streaming-server:latest-cpu` | 5002 | Text-to-speech synthesis |
+| **xtts** | `aplus-xtts` | `ghcr.io/coqui-ai/xtts-streaming-server:latest-cuda121` | 5002 | Text-to-speech synthesis (GPU) |
 | **onnx-runtime** | `aplus-onnx` | `ghcr.io/huggingface/text-embeddings-inference:cpu-1.9` | 8001 | Text embedding server |
 | **chromadb** | `aplus-chromadb` | `chromadb/chroma:latest` | 8000 | Vector database for embeddings |
 

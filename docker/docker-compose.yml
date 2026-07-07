@@ -26,7 +26,7 @@ services:
       - aplus
 
   xtts:
-    image: ghcr.io/coqui-ai/xtts-streaming-server:latest-cpu
+    image: ghcr.io/coqui-ai/xtts-streaming-server:latest-cuda121
     container_name: aplus-xtts
     restart: "no"
     environment:
@@ -34,13 +34,18 @@ services:
     ports:
       - "${APLUS_XTTS_PORT:-5002}:80"
     volumes:
-      - xtts_data:/app/tts_models
+      - xtts_data:/root/.local/share/tts
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80/languages"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 60s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
     networks:
       - aplus
 
