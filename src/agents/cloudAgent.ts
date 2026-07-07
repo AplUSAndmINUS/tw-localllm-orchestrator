@@ -7,15 +7,17 @@ const AGENT_NAME = 'CloudAgent';
 const RUNTIME = 'cloud';
 const INTENT = 'cloud';
 
+// Anthropic direct API is intentionally not a default route here — it's only
+// used when explicitly requested elsewhere, not auto-selected by the orchestrator.
 const CLOUD_ROUTES: CloudRouteMap = {
-  heavy_reasoning:    { provider: 'anthropic', model: 'claude-3-opus-20250219' },
+  heavy_reasoning:    { provider: 'azure',     model: 'claude-opus-4-8' },
   fallback_reasoning: { provider: 'azure',     model: 'gpt-4.1' },
   vision:             { provider: 'azure',     model: 'gpt-4o' },
   design:             { provider: 'anthropic', model: 'claude-3-sonnet-20250514' },
-  cowork:             { provider: 'anthropic', model: 'claude-3-opus-20250219' },
-  major_code:         { provider: 'anthropic', model: 'claude-3-opus-20250219' },
+  cowork:             { provider: 'azure',     model: 'claude-opus-4-8' },
+  major_code:         { provider: 'azure',     model: 'claude-opus-4-8' },
   creative:           { provider: 'anthropic', model: 'claude-3-haiku-20250307' },
-  mid_reasoning:      { provider: 'anthropic', model: 'claude-3-sonnet-20250514' },
+  mid_reasoning:      { provider: 'azure',     model: 'Phi-4-reasoning' },
   stt:                { provider: 'azure',     model: 'gpt-4o-transcribe-diarize' },
   tts:                { provider: 'azure',     model: 'gpt-4o-mini-tts' },
 };
