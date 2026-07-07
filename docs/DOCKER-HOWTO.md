@@ -85,8 +85,8 @@ The main `docker-compose.yml` (in the `docker` folder) defines four services:
 | Service | Container Name | Image | Default Port | What It Does |
 |---|---|---|---|---|
 | **ollama** | `aplus-ollama` | `ollama/ollama:latest` | 11434 | Runs local LLMs (like phi4-mini) |
-| **xtts** | `aplus-xtts` | `ghcr.io/coqui-ai/xtts:latest` | 5002 | Text-to-speech synthesis |
-| **onnx-runtime** | `aplus-onnx` | `mcr.microsoft.com/onnxruntime/server:latest` | 8001 | ONNX model inference server |
+| **xtts** | `aplus-xtts` | `ghcr.io/coqui-ai/xtts-streaming-server:latest-cpu` | 5002 | Text-to-speech synthesis |
+| **onnx-runtime** | `aplus-onnx` | `ghcr.io/huggingface/text-embeddings-inference:cpu-1.9` | 8001 | Text embedding server |
 | **chromadb** | `aplus-chromadb` | `chromadb/chroma:latest` | 8000 | Vector database for embeddings |
 
 **Important:** LM Studio runs **outside** Docker. It is a regular desktop application that you install and run on Windows like any other program. Docker only manages the four services listed above.

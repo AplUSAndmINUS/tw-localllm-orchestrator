@@ -5,12 +5,12 @@ import { ServiceHealth } from '../types';
 
 const endpoint: string = config.endpoints.onnx;
 
-async function embed(input: string | string[], model: string = 'all-MiniLM-L6-v2'): Promise<number[][] | null> {
+async function embed(input: string | string[]): Promise<number[][] | null> {
   try {
-    const { data } = await axios.post(`${endpoint}/embed`, { input, model });
-    return data.embeddings || data;
+    const { data } = await axios.post(`${endpoint}/embed`, { inputs: input });
+    return data;
   } catch (err: unknown) {
-    logger.error('ONNX embed failed', { model, error: (err as Error).message });
+    logger.error('ONNX embed failed', { error: (err as Error).message });
     return null;
   }
 }

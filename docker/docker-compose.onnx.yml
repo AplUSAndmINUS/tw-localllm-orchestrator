@@ -2,13 +2,14 @@ version: "3.9"
 
 services:
   onnx-runtime:
-    image: mcr.microsoft.com/onnxruntime/server:latest
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.9
     container_name: aplus-onnx
     restart: unless-stopped
+    command: ["--model-id", "sentence-transformers/all-MiniLM-L6-v2"]
     ports:
-      - "${APLUS_ONNX_PORT:-8001}:8001"
+      - "${APLUS_ONNX_PORT:-8001}:80"
     volumes:
-      - onnx_models:/models
+      - onnx_models:/data
 
 volumes:
   onnx_models:
