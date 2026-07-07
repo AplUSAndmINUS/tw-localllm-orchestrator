@@ -197,6 +197,9 @@ export interface AppConfig {
     healthCheckInterval: number;
     allowFallback: boolean;
   };
+  xtts: {
+    voicesPath: string;
+  };
   azure: {
     endpoint: string;
     apiKey: string;

@@ -41,6 +41,10 @@ const config: AppConfig = {
     allowFallback: process.env.APLUS_LMSTUDIO_ALLOW_FALLBACK !== 'false',
   },
 
+  xtts: {
+    voicesPath: process.env.APLUS_XTTS_VOICES_PATH || path.join(PROJECT_ROOT, 'docker', 'config', 'voices'),
+  },
+
   azure: {
     endpoint: process.env.AZURE_OPENAI_ENDPOINT || '',
     apiKey: process.env.AZURE_OPENAI_API_KEY || '',
