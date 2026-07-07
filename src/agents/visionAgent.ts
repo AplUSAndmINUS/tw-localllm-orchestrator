@@ -1,13 +1,15 @@
 import * as lmstudio from '../models/lmstudio';
 import * as ollama from '../models/ollama';
 import config from '../config';
+import { getAgentProfile } from '../config/agentRegistry';
 import logger from '../tools/logger';
 import { AgentResponse, AgentMetadata, AgentExecuteParams, ChatMessage, Agent, OllamaResponse, LMStudioResponse } from '../types';
 
 const AGENT_NAME = 'VisionAgent';
-const MODEL = 'phi-4-reasoning-plus-vision-Q4_K_M.gguf';
+const PROFILE = getAgentProfile(AGENT_NAME);
+const MODEL = PROFILE.model;
 const FALLBACK_MODEL: string = config.ollama.entryModel;
-const RUNTIME = 'lmstudio';
+const RUNTIME = PROFILE.runtime;
 const INTENT = 'vision';
 
 async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> {
@@ -73,7 +75,7 @@ const metadata: AgentMetadata = {
   intent: INTENT,
   runtime: RUNTIME,
   model: MODEL,
-  capabilities: ['image_understanding', 'ocr', 'visual_reasoning', 'multimodal'],
+  capabilities: PROFILE.capabilities,
 };
 
 export { execute, metadata };

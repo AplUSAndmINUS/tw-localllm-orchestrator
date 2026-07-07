@@ -1,10 +1,12 @@
 import * as xtts from '../models/xtts';
+import { getAgentProfile } from '../config/agentRegistry';
 import logger from '../tools/logger';
 import { AgentResponse, AgentMetadata, AgentExecuteParams, Agent } from '../types';
 
 const AGENT_NAME = 'TTSAgent';
-const MODEL = 'xtts-v2';
-const RUNTIME = 'xtts';
+const PROFILE = getAgentProfile(AGENT_NAME);
+const MODEL = PROFILE.model;
+const RUNTIME = PROFILE.runtime;
 const INTENT = 'text_to_speech';
 
 async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> {
@@ -50,7 +52,7 @@ const metadata: AgentMetadata = {
   intent: INTENT,
   runtime: RUNTIME,
   model: MODEL,
-  capabilities: ['text_to_speech', 'voice_synthesis', 'audio_generation'],
+  capabilities: PROFILE.capabilities,
 };
 
 export { execute, metadata };

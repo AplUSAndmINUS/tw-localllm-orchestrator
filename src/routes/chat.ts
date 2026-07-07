@@ -65,12 +65,15 @@ async function chatRoute(req: Request, res: Response, next: NextFunction): Promi
 
     const requiredContainer = INTENT_CONTAINER_MAP[intent!];
     if (requiredContainer) {
-      if (containerManager.isGpuSaturated() && AGENT_MAP['cloud']) {
-        logger.info('GPU saturated, routing to cloud', { intent });
-        const cloudResult = await AGENT_MAP['cloud'].execute({ messages, options, cloudIntent: intent });
-        if (classification) cloudResult.classification = classification;
-        res.json(cloudResult);
-        return;
+      if (containerManager.isGpuSaturated()) {
+        const recovered = await containerManager.freeGpuHeadroom(requiredContainer);
+        if (!recovered && AGENT_MAP['cloud']) {
+          logger.info('GPU saturated after recovery attempt, routing to cloud', { intent });
+          const cloudResult = await AGENT_MAP['cloud'].execute({ messages, options, cloudIntent: intent });
+          if (classification) cloudResult.classification = classification;
+          res.json(cloudResult);
+          return;
+        }
       }
       await containerManager.ensureRunning(requiredContainer);
       containerManager.recordActivity(requiredContainer);

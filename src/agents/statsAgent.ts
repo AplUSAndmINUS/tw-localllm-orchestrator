@@ -1,13 +1,16 @@
 import * as lmstudio from '../models/lmstudio';
 import * as ollama from '../models/ollama';
+import * as containerManager from '../tools/containerManager';
 import config from '../config';
+import { getAgentProfile } from '../config/agentRegistry';
 import logger from '../tools/logger';
 import { AgentResponse, AgentMetadata, AgentExecuteParams, ChatMessage, Agent, OllamaResponse, LMStudioResponse } from '../types';
 
 const AGENT_NAME = 'StatsAgent';
-const MODEL = 'deepseek-r1-14b-Q4_K_M.gguf';
+const PROFILE = getAgentProfile(AGENT_NAME);
+const MODEL = PROFILE.model;
 const FALLBACK_MODEL: string = config.ollama.entryModel;
-const RUNTIME = 'lmstudio';
+const RUNTIME = PROFILE.runtime;
 const INTENT = 'stats';
 
 async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> {
@@ -30,6 +33,8 @@ async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> 
       response = await lmstudio.chat(chatMessages, { model: MODEL, ...options });
     } else if (config.lmstudio.allowFallback) {
       logger.warn('StatsAgent falling back to Ollama', { reason: available ? 'model not loaded' : 'LM Studio unavailable' });
+      await containerManager.ensureRunning('ollama');
+      containerManager.recordActivity('ollama');
       usedRuntime = 'ollama';
       usedModel = FALLBACK_MODEL;
       response = await ollama.chat(FALLBACK_MODEL, chatMessages, options);
@@ -73,7 +78,7 @@ const metadata: AgentMetadata = {
   intent: INTENT,
   runtime: RUNTIME,
   model: MODEL,
-  capabilities: ['statistical_analysis', 'data_science', 'probability'],
+  capabilities: PROFILE.capabilities,
 };
 
 export { execute, metadata };

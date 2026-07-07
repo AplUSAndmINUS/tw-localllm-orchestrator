@@ -1,10 +1,12 @@
 import * as ollama from '../models/ollama';
+import { getAgentProfile } from '../config/agentRegistry';
 import logger from '../tools/logger';
 import { AgentResponse, AgentMetadata, AgentExecuteParams, ChatMessage, Agent, OllamaResponse } from '../types';
 
 const AGENT_NAME = 'CodingAgent';
-const MODEL = 'deepseek-coder:latest';
-const RUNTIME = 'ollama';
+const PROFILE = getAgentProfile(AGENT_NAME);
+const MODEL = PROFILE.model;
+const RUNTIME = PROFILE.runtime;
 const INTENT = 'coding';
 
 async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> {
@@ -48,7 +50,7 @@ const metadata: AgentMetadata = {
   intent: INTENT,
   runtime: RUNTIME,
   model: MODEL,
-  capabilities: ['code_generation', 'debugging', 'code_review', 'programming'],
+  capabilities: PROFILE.capabilities,
 };
 
 export { execute, metadata };

@@ -13,14 +13,19 @@ async function ttsRoute(req: Request, res: Response, next: NextFunction): Promis
     }
 
     await containerManager.ensureRunning('xtts');
-    containerManager.recordActivity('xtts');
+    containerManager.beginRequest('xtts');
 
-    const result = await ttsAgent.execute({
-      text,
-      language: language || 'en',
-      voiceRef,
-      options,
-    });
+    let result;
+    try {
+      result = await ttsAgent.execute({
+        text,
+        language: language || 'en',
+        voiceRef,
+        options,
+      });
+    } finally {
+      containerManager.endRequest('xtts');
+    }
 
     if (!result) {
       res.status(502).json({ error: 'tts_error', message: 'TTS agent failed' });

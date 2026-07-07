@@ -1,10 +1,12 @@
 import * as ollama from '../models/ollama';
+import { getAgentProfile } from '../config/agentRegistry';
 import logger from '../tools/logger';
 import { AgentResponse, AgentMetadata, AgentExecuteParams, ChatMessage, Agent, OllamaResponse } from '../types';
 
 const AGENT_NAME = 'SpeechAgent';
-const MODEL = 'whisper-large:latest';
-const RUNTIME = 'ollama';
+const PROFILE = getAgentProfile(AGENT_NAME);
+const MODEL = PROFILE.model;
+const RUNTIME = PROFILE.runtime;
 const INTENT = 'speech_to_text';
 
 async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> {
@@ -69,7 +71,7 @@ const metadata: AgentMetadata = {
   intent: INTENT,
   runtime: RUNTIME,
   model: MODEL,
-  capabilities: ['speech_to_text', 'audio_transcription'],
+  capabilities: PROFILE.capabilities,
 };
 
 export { execute, metadata };
