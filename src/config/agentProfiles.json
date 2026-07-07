@@ -114,16 +114,12 @@
     },
     "SpeechAgent": {
       "agentName": "SpeechAgent",
-      "description": "Speech-to-text transcription",
-      "runtime": "ollama",
-      "model": "whisper-large:latest",
-      "endpoint": "http://${APLUS_TAILSCALE_HOST}:${APLUS_OLLAMA_PORT}",
-      "capabilities": ["stt"],
-      "costModel": "local_free",
-      "healthCheck": "/api/tags",
-      "fallbacks": {
-        "cloud": "whisper-1"
-      }
+      "description": "Speech-to-text transcription with speaker diarization via Azure",
+      "runtime": "azure",
+      "model": "gpt-4o-transcribe-diarize",
+      "endpoint": "${AZURE_OPENAI_ENDPOINT}",
+      "capabilities": ["stt", "transcription", "speaker_diarization"],
+      "costModel": "cloud_tracked"
     },
     "TTSAgent": {
       "agentName": "TTSAgent",

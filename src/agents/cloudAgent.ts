@@ -16,7 +16,7 @@ const CLOUD_ROUTES: CloudRouteMap = {
   major_code:         { provider: 'anthropic', model: 'claude-3-opus-20250219' },
   creative:           { provider: 'anthropic', model: 'claude-3-haiku-20250307' },
   mid_reasoning:      { provider: 'anthropic', model: 'claude-3-sonnet-20250514' },
-  stt:                { provider: 'azure',     model: 'whisper-1' },
+  stt:                { provider: 'azure',     model: 'gpt-4o-transcribe-diarize' },
   tts:                { provider: 'azure',     model: 'gpt-4o-mini-tts' },
 };
 

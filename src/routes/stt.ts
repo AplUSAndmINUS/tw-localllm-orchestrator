@@ -1,7 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 import speechAgent from '../agents/speechAgent';
-import * as containerManager from '../tools/containerManager';
-import logger from '../tools/logger';
 
 async function sttRoute(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -12,11 +10,8 @@ async function sttRoute(req: Request, res: Response, next: NextFunction): Promis
       return;
     }
 
-    await containerManager.ensureRunning('ollama');
-    containerManager.recordActivity('ollama');
-
     const result = await speechAgent.execute({
-      prompt: audio,
+      audio,
       options: { language, ...options },
     });
 

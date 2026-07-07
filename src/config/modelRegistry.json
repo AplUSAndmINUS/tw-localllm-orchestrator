@@ -114,14 +114,14 @@
       "costModel": "local_free"
     },
     "stt": {
-      "id": "whisper-large",
-      "name": "Whisper Large v3 Turbo",
-      "runtime": "ollama",
-      "model": "whisper-large:latest",
-      "endpoint": "http://${APLUS_TAILSCALE_HOST}:${APLUS_OLLAMA_PORT}",
-      "purpose": "Speech-to-text transcription",
-      "capabilities": ["stt", "transcription"],
-      "costModel": "local_free"
+      "id": "gpt-4o-transcribe-diarize",
+      "name": "GPT-4o Transcribe (Diarized)",
+      "runtime": "azure",
+      "model": "gpt-4o-transcribe-diarize",
+      "endpoint": "${AZURE_OPENAI_ENDPOINT}",
+      "purpose": "Speech-to-text transcription with speaker diarization",
+      "capabilities": ["stt", "transcription", "speaker_diarization"],
+      "costModel": "cloud_tracked"
     },
     "tts": {
       "id": "xtts-v2",
