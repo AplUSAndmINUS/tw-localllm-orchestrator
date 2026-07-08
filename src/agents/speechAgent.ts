@@ -30,12 +30,14 @@ async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> 
       throw new Error('Azure transcription returned null');
     }
 
+    const text = (result as Record<string, unknown>).text;
+
     return {
       agent: AGENT_NAME,
       model: MODEL,
       intent: INTENT,
       runtime: RUNTIME,
-      content: (result as Record<string, unknown>).text as string || JSON.stringify(result),
+      content: typeof text === 'string' ? text : JSON.stringify(result),
       tokens: { input: 0, output: 0 },
       latency_ms: latencyMs,
       cached: false,

@@ -30,10 +30,11 @@ function getRoute(cloudIntent: string): CloudRoute {
   return route;
 }
 
-function getClient(provider: string): typeof azure | typeof anthropic {
-  if (provider === 'anthropic') return anthropic;
-  if (provider === 'azure') return azure;
-  throw new Error(`Unknown cloud provider: ${provider}`);
+// Claude models deployed on Azure speak the native Anthropic Messages API
+// (different host/auth/response shape), not the OpenAI-compatible route every
+// other Azure model uses — so routing has to key off the model, not just the provider.
+function isClaudeModel(model: string): boolean {
+  return model.startsWith('claude');
 }
 
 async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> {
@@ -43,7 +44,7 @@ async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> 
   try {
     const route = getRoute(cloudIntent);
     const { provider, model } = route;
-    const client = getClient(provider);
+    const useAnthropicShape = provider === 'anthropic' || isClaudeModel(model);
 
     if (cloudIntent === 'stt') {
       if (!azure.isAvailable()) {
@@ -61,12 +62,14 @@ async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> 
         throw new Error('Azure transcription returned null');
       }
 
+      const sttText = (result as Record<string, unknown>).text;
+
       return {
         agent: AGENT_NAME,
         model,
         intent: INTENT,
         runtime: 'cloud_azure',
-        content: (result as Record<string, unknown>).text as string || JSON.stringify(result),
+        content: typeof sttText === 'string' ? sttText : JSON.stringify(result),
         tokens: { input: 0, output: 0 },
         latency_ms: latencyMs,
         cached: false,
@@ -102,7 +105,14 @@ async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> 
       ? messages
       : [{ role: 'user', content: prompt || '' }];
 
-    const response = await client.chat(model, chatMessages, options);
+    let response: AzureResponse | AnthropicResponse | null;
+    if (provider === 'anthropic') {
+      response = await anthropic.chat(model, chatMessages, options);
+    } else if (isClaudeModel(model)) {
+      response = await azure.chatClaude(model, chatMessages, options);
+    } else {
+      response = await azure.chat(model, chatMessages, options);
+    }
     const latencyMs = Date.now() - startMs;
 
     if (!response) {
@@ -112,7 +122,7 @@ async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> 
     let content: string;
     let tokens: TokenUsage;
 
-    if (provider === 'anthropic') {
+    if (useAnthropicShape) {
       const anthResponse = response as AnthropicResponse;
       content = anthResponse.content || '';
       tokens = {
