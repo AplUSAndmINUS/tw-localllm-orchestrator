@@ -70,6 +70,46 @@ async function listVoices(): Promise<Array<Record<string, unknown>> | null> {
   }
 }
 
+async function listCnvProjects(): Promise<Array<Record<string, unknown>> | null> {
+  try {
+    const { data } = await axios.get(
+      `https://${region}.api.cognitive.microsoft.com/customvoice/projects?api-version=2024-02-01-preview`,
+      { headers: { 'Ocp-Apim-Subscription-Key': apiKey } }
+    );
+    return data.value || [];
+  } catch (err: unknown) {
+    logger.error('Azure Speech listCnvProjects failed', { error: (err as Error).message });
+    return null;
+  }
+}
+
+// Custom voice synthesis uses a *different* subdomain (voice., not tts.) and
+// passes the deployment as a query param, not a header — confirmed via Microsoft's
+// docs, but not yet exercised live since no custom voice has been trained/deployed.
+async function synthesizeCustomVoice(text: string, deploymentId: string, voiceName: string): Promise<Buffer | null> {
+  try {
+    const ssml = `<speak version='1.0' xml:lang='en-US'><voice xml:lang='en-US' name='${voiceName}'>${escapeXml(text)}</voice></speak>`;
+
+    const { data } = await axios.post(
+      `https://${region}.voice.speech.microsoft.com/cognitiveservices/v1?deploymentId=${encodeURIComponent(deploymentId)}`,
+      ssml,
+      {
+        headers: {
+          'Ocp-Apim-Subscription-Key': apiKey,
+          'Content-Type': 'application/ssml+xml',
+          'X-Microsoft-OutputFormat': 'riff-24khz-16bit-mono-pcm',
+          'User-Agent': 'tw-localllm-orchestrator',
+        },
+        responseType: 'arraybuffer',
+      }
+    );
+    return data;
+  } catch (err: unknown) {
+    logger.error('Azure Speech synthesizeCustomVoice failed', { deploymentId, error: (err as Error).message });
+    return null;
+  }
+}
+
 function isAvailable(): boolean {
   return Boolean(apiKey && region);
 }
@@ -78,5 +118,7 @@ export {
   synthesize,
   transcribe,
   listVoices,
+  listCnvProjects,
+  synthesizeCustomVoice,
   isAvailable,
 };

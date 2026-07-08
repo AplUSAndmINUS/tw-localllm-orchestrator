@@ -134,6 +134,33 @@
         "cloud": "gpt-4o-mini-tts"
       }
     },
+    "AzureSpeechTTS": {
+      "agentName": "AzureSpeechTTS",
+      "description": "Advanced text-to-speech via Azure AI Speech (beyond XTTS — 725 neural voices)",
+      "runtime": "azure_speech",
+      "model": "en-US-GuyNeural",
+      "endpoint": "https://${AZURE_SPEECH_REGION}.tts.speech.microsoft.com",
+      "capabilities": ["tts", "voice_synthesis", "neural_voice"],
+      "costModel": "cloud_tracked"
+    },
+    "AzureSpeechSTT": {
+      "agentName": "AzureSpeechSTT",
+      "description": "Advanced speech-to-text via Azure AI Speech (heavy/long-form transcription)",
+      "runtime": "azure_speech",
+      "model": "azure-speech-stt",
+      "endpoint": "https://${AZURE_SPEECH_REGION}.stt.speech.microsoft.com",
+      "capabilities": ["stt", "transcription"],
+      "costModel": "cloud_tracked"
+    },
+    "AzureSpeechCNV": {
+      "agentName": "AzureSpeechCNV",
+      "description": "Custom Neural Voice management and synthesis via Azure AI Speech",
+      "runtime": "azure_speech",
+      "model": "custom-neural-voice",
+      "endpoint": "https://${AZURE_SPEECH_REGION}.api.cognitive.microsoft.com/customvoice",
+      "capabilities": ["custom_neural_voice", "voice_training", "voice_cloning"],
+      "costModel": "cloud_tracked"
+    },
     "VisionAgent": {
       "agentName": "VisionAgent",
       "description": "Image reasoning and multimodal analysis",
