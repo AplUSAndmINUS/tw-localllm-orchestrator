@@ -1,917 +1,346 @@
 # tw-localllm-orchestrator
 
-> **AplUSAndmINUS Local LLM Orchestration System** — A self-hosted, privacy-first AI inference platform routing requests across LM Studio, Ollama, XTTS, ONNX Runtime, and ChromaDB via an Express.js orchestrator on a private Tailscale mesh network.
+> A personal, self-hosted LLM orchestrator. A TypeScript/Express server that classifies each request and routes it to the right backend — local (Ollama, LM Studio) or cloud (Azure, Anthropic) — with GPU-aware fallback and on-demand Docker container lifecycle management.
 
 ---
 
 ## Table of Contents
 
 - [Overview](#overview)
-- [System Architecture](#system-architecture)
-- [Services & Runtimes](#services--runtimes)
-  - [Express.js Orchestrator](#expressjs-orchestrator)
-  - [LM Studio — Manual Heavy-Model Runtime](#lm-studio--manual-heavy-model-runtime)
-  - [Ollama — Hot-Swap Runtime](#ollama--hot-swap-runtime)
-  - [XTTS — Text-to-Speech Service](#xtts--text-to-speech-service)
-  - [ONNX Runtime — Inference Service](#onnx-runtime--inference-service)
-  - [ChromaDB — Vector Store](#chromadb--vector-store)
-- [Tailscale Network & Endpoints](#tailscale-network--endpoints)
-- [Routing Logic](#routing-logic)
-- [Agent Profiles](#agent-profiles)
-- [Configuration Files](#configuration-files)
-- [Directory Structure](#directory-structure)
-- [Setup & Installation](#setup--installation)
-- [Usage Examples](#usage-examples)
+- [Architecture](#architecture)
+- [Runtimes](#runtimes)
+  - [Ollama — hot-swap local models](#ollama--hot-swap-local-models)
+  - [LM Studio — manual heavy models](#lm-studio--manual-heavy-models)
+  - [XTTS — text-to-speech / voice cloning](#xtts--text-to-speech--voice-cloning)
+  - [ONNX runtime — text embeddings](#onnx-runtime--text-embeddings)
+  - [ChromaDB — vector store](#chromadb--vector-store)
+  - [Azure AI Speech — advanced TTS/STT + Custom Neural Voice](#azure-ai-speech--advanced-ttsstt--custom-neural-voice)
+- [Cloud routing](#cloud-routing)
+- [Intent classification and routing](#intent-classification-and-routing)
+- [GPU saturation handling](#gpu-saturation-handling)
+- [Container lifecycle](#container-lifecycle)
+- [Agent & model configuration](#agent--model-configuration)
+- [API reference](#api-reference)
+- [Directory structure](#directory-structure)
+- [Setup](#setup)
+- [Usage examples](#usage-examples)
 - [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
 
 ---
 
 ## Overview
 
-`tw-localllm-orchestrator` is the central intelligence hub for the **TW Local LLM Orchestration System** — a fully on-premises, air-gappable AI stack designed for privacy, low latency, and flexible model routing. All inference, speech synthesis, embedding, and retrieval-augmented generation (RAG) workloads run on your own hardware, reachable securely across a Tailscale private mesh.
+This orchestrator sits in front of a mix of local and cloud LLM backends and gives you a single, stable API surface regardless of what's actually serving the request. It runs entirely on one machine (no Tailscale mesh, no multi-node topology) and is designed to be lightweight: the server itself just classifies, routes, and normalizes responses — actual inference always happens in Ollama, LM Studio, a Docker container, or a cloud provider.
 
-**Key design principles:**
+**Design principles:**
 
-- **Zero cloud dependency** — no data leaves the TW mesh
-- **Tiered model routing** — lightweight queries go to Ollama; heavy/complex tasks route to LM Studio
-- **Hot-swap capable** — Ollama models can be pulled and swapped at runtime without service restart
-- **Composable agents** — named agent profiles combine model, system prompt, voice, and retrieval context
-- **Single entry point** — all clients speak to the Express.js orchestrator; backend topology is invisible to consumers
-
----
-
-## System Architecture
-
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                        TW Tailscale Mesh                              │
-│                                                                          │
-│  Clients (Web UI, CLI, Automations)                                      │
-│           │                                                              │
-│           ▼                                                              │
-│  ┌─────────────────────────┐                                             │
-│  │  Express.js Orchestrator │  ← tw-localllm-orchestrator (this repo)   │
-│  │  (Node.js, port 3200)   │                                             │
-│  └──────────┬──────────────┘                                             │
-│             │                                                            │
-│    ┌────────┼────────────────────────────────┐                           │
-│    │        │                                │                           │
-│    ▼        ▼                                ▼                           │
-│  ┌──────┐ ┌────────────────┐  ┌─────────────────────────────────────┐   │
-│  │Ollama│ │   LM Studio    │  │         Docker Services              │   │
-│  │:your-ollama-port│ │ (manual start) │  │  ┌──────────┐ ┌──────┐ ┌─────────┐ │   │
-│  │      │ │   :your-lmstudio-port        │  │  │  XTTS    │ │ ONNX │ │ChromaDB │ │   │
-│  │ hot- │ │  heavy models  │  │  │  :your-xtts-port   │ │:your-onnx-port │ │  :your-chromadb-port  │ │   │
-│  │ swap │ │  (manual load) │  │  └──────────┘ └──────┘ └─────────┘ │   │
-│  └──────┘ └────────────────┘  └─────────────────────────────────────┘   │
-└──────────────────────────────────────────────────────────────────────────┘
-```
-
-### Data Flow
-
-1. **Client** sends a request to the orchestrator (`POST /v1/chat`, `/v1/tts`, `/v1/embed`, etc.)
-2. **Orchestrator** resolves the agent profile and applies routing rules
-3. Request is forwarded to the appropriate backend (Ollama, LM Studio, XTTS, ONNX, or ChromaDB)
-4. If RAG is enabled for the agent, ChromaDB is queried first to inject relevant context
-5. Response is normalized and returned to the client in a consistent schema
+- **Local-first, cloud when it makes sense** — an entry model classifies every `/v1/chat` request and routes it to a local specialist agent; cloud is only used when explicitly requested or when the local GPU is genuinely saturated
+- **Ollama does the hot-swapping** — the orchestrator just calls `ollama.chat(model, ...)` with the right model name; Ollama's own scheduler handles loading/evicting models in VRAM
+- **Docker containers start on demand, stop when idle** — XTTS, the embeddings service, and ChromaDB spin up on first use and shut down automatically after a period of inactivity (in-flight requests are protected from being stopped mid-job)
+- **Config-driven agent identity** — every agent's model, runtime, and capabilities are read from `src/config/agentProfiles.json`, not hardcoded per-file
 
 ---
 
-## Services & Runtimes
+## Architecture
 
-### Express.js Orchestrator
-
-The orchestrator is the sole client-facing component. It handles:
-
-| Responsibility | Details |
-|---|---|
-| Request intake | REST endpoints on port `3200` |
-| Agent resolution | Looks up profile from `agents/` config |
-| Route selection | Applies routing rules (model type, load, capability) |
-| RAG injection | Queries ChromaDB and prepends context chunks |
-| Response normalization | Unified response schema regardless of backend |
-| Health aggregation | `/health` endpoint polls all backends |
-| Streaming | Server-Sent Events (SSE) passthrough for streaming completions |
-
-**Core dependencies:**
-
-```json
-{
-  "express": "^4.x",
-  "axios": "^1.x",
-  "chromadb": "^1.x",
-  "dotenv": "^16.x",
-  "morgan": "^1.x",
-  "express-rate-limit": "^7.x"
-}
+```
+Client
+  │
+  ▼
+Express orchestrator (src/server.ts, port 3200 by default)
+  │
+  ├─ POST /v1/chat  → entryAgent classifies intent (phi4-mini via Ollama)
+  │                     │
+  │                     ├─ local agent (reasoning/stats/rag/coding/math/general)
+  │                     │     └─ GPU saturated? → try freeing headroom → else escalate to cloud
+  │                     └─ image_high / image_low / vision (LM Studio, falls back to Ollama)
+  │
+  ├─ POST /v1/tts   → XTTS (Docker, local voice synthesis + cloning)
+  ├─ POST /v1/stt   → Azure (gpt-4o-transcribe-diarize) — no working local STT exists
+  ├─ POST /v1/rag   → ChromaDB query + Ollama generation
+  ├─ POST /v1/image → Ollama (imageAgentHigh / imageAgentLow)
+  ├─ POST /v1/code  → Ollama (codingAgent)
+  ├─ POST /v1/vision→ LM Studio, falls back to Ollama
+  └─ POST /v1/cloud → direct dispatch to Azure or Anthropic by cloudIntent
 ```
 
-**Entry point:** `src/server.js`
+Every route follows the same shape: validate input → ensure the required backend/container is running → execute the agent → return a normalized `AgentResponse` (`{ agent, model, intent, runtime, content, tokens, latency_ms, cached }`).
 
-**Primary API endpoints:**
+---
+
+## Runtimes
+
+### Ollama — hot-swap local models
+
+Runs as a Docker container (`docker/docker-compose.yml`, service `ollama`), GPU-enabled by default. Handles: intent classification (`phi4-mini:latest`), reasoning fallback, stats fallback, RAG, coding, math, image description, and the LM Studio fallback path for reasoning/vision.
+
+Models are expected to already be pulled locally (`docker exec aplus-ollama ollama pull <model>`) — the orchestrator does **not** pull models on demand; it just calls `ollama.chat(model, ...)` and lets Ollama's own scheduler load/evict models in VRAM as needed.
+
+### LM Studio — manual heavy models
+
+Runs **outside Docker** as a regular desktop app — the orchestrator only talks to its OpenAI-compatible API (`config.endpoints.lmstudio`). Used for `reasoning_heavy`, `stats`, and `vision` when a matching model is loaded. If LM Studio is offline or has the wrong model loaded, these agents automatically fall back to Ollama (using the entry model) — controlled by `APLUS_LMSTUDIO_ALLOW_FALLBACK`.
+
+### XTTS — text-to-speech / voice cloning
+
+Docker container (`ghcr.io/coqui-ai/xtts-streaming-server`), CPU or CUDA image depending on your GPU. Used for local, iterative TTS — including cloning your own voice from a short reference clip.
+
+- Drop a reference clip at `docker/config/voices/<name>.wav`
+- Pass `"voiceRef": "<name>"` to `/v1/tts` — the first call clones it via XTTS's `/clone_speaker` and caches the resulting embedding as `<name>.json`; every call after reuses the cache
+- Falls back to one of XTTS's 58 built-in studio speakers if no matching local voice is found
+- See `docker/config/voices/README.md`
+
+This is the **draft/iteration** voice path. Final-quality narration (e.g. for a finished audiobook) is intended to go through Azure's Custom Neural Voice instead — see [Cloud routing](#cloud-routing).
+
+### ONNX runtime — text embeddings
+
+Docker container, service name `onnx-runtime` (the name predates the current image — it's not literally ONNX Runtime Server, which was discontinued after v1.8 in 2020). Runs [Hugging Face Text Embeddings Inference](https://github.com/huggingface/text-embeddings-inference) serving `sentence-transformers/all-MiniLM-L6-v2`, exposing `POST /embed` and `GET /health`.
+
+### ChromaDB — vector store
+
+Docker container, backs the `/v1/rag` endpoint. Collections are named `<agentId>_<namespace>` (defaults to `default_default` if neither is given). Embeddings are generated by calling the ONNX/TEI service directly (`onnx.embed()`) rather than relying on the ChromaDB client's own embedding function — the JS client wants a separate `chromadb-default-embed` package (which bundles its own local model) to do that automatically, and there's no reason to duplicate an embedding model we already run.
+
+### Azure AI Speech — advanced TTS/STT + Custom Neural Voice
+
+A classic Cognitive Services Speech resource (`src/cloud/azureSpeech.ts`), separate from the Azure OpenAI/Foundry resource above and reached over its own region-keyed REST API (`https://{region}.tts.speech.microsoft.com`, `.stt.speech.microsoft.com`, etc.) rather than the Foundry endpoint style. This is the advanced tier beyond XTTS/gpt-4o-transcribe-diarize — long-form transcription, 725 standard neural voices, and Custom Neural Voice (train a model on your own voice, deploy it, synthesize with it).
+
+Three dedicated routes, separate from `/v1/tts` and `/v1/stt` since those names were already taken by XTTS and the Azure OpenAI transcription deployment respectively:
+
+- `POST /v1/speech/tts` — synthesize with a standard neural voice (`AzureSpeechTTS` agent)
+- `POST /v1/speech/stt` — transcribe audio (`AzureSpeechSTT` agent)
+- `GET /v1/speech/cnv` — list your Custom Neural Voice projects
+- `POST /v1/speech/cnv` — synthesize with a *trained and deployed* custom voice (`{text, deploymentId, voiceName}`) — custom voice synthesis uses a different subdomain (`voice.speech.microsoft.com`, not `tts.`) with the deployment passed as a `?deploymentId=` query param, per Microsoft's docs. This one hasn't been exercised against a real deployment yet since none exists — everything else on this resource has been verified live.
+
+---
+
+## Cloud routing
+
+Cloud is reached two ways: automatically, when the local GPU is saturated and headroom can't be freed (see below), or explicitly via `POST /v1/cloud` with a `cloudIntent`. Both paths go through `cloudAgent.ts`, which resolves a `cloudIntent` to a `{provider, model}` pair:
+
+| `cloudIntent` | Provider | Model | Used for |
+|---|---|---|---|
+| `mid_reasoning` | Azure | `Phi-4-reasoning` | Mid-tier cloud reasoning |
+| `heavy_reasoning` | Azure | `claude-opus-4-8` | High-end cloud reasoning |
+| `major_code` | Azure | `claude-opus-4-8` | Heavy coding tasks |
+| `cowork` | Azure | `claude-opus-4-8` | Collaborative/agentic work |
+| `stt` | Azure | `gpt-4o-transcribe-diarize` | Speech-to-text with speaker diarization |
+| `vision` | Azure | `gpt-4o` | Cloud vision |
+| `fallback_reasoning` | Azure | `gpt-4.1` | Secondary reasoning fallback |
+| `tts` | Azure | `gpt-4o-mini-tts` | Cloud TTS fallback |
+| `design` | Anthropic (direct) | `claude-3-sonnet-20250514` | Only reachable via explicit `/v1/cloud` call |
+| `creative` | Anthropic (direct) | `claude-3-haiku-20250307` | Only reachable via explicit `/v1/cloud` call |
+
+All three Azure-hosted models (`gpt-4o-transcribe-diarize`, `Phi-4-reasoning`, `claude-opus-4-8`) share one Azure OpenAI/Foundry resource (`AZURE_OPENAI_ENDPOINT`/`AZURE_OPENAI_API_KEY`) — but not one wire protocol. `azure.chat()` calls the unified `{endpoint}/chat/completions` route (model name in the body) for OpenAI and Foundry-catalog models like Phi-4-reasoning. Claude models are detected by name (`isClaudeModel()` in `cloudAgent.ts`) and instead routed to `azure.chatClaude()`, which speaks the *native Anthropic Messages API* on a completely different host (`.services.ai.azure.com/anthropic/v1/messages`, not `.openai.azure.com`) with its own auth header (`x-api-key`) and response shape. Audio (`gpt-4o-transcribe-diarize`) needs yet another shape — the classic per-deployment path on the plain resource root (`/openai/deployments/{model}/audio/transcriptions`) with a specific `api-version`. None of this is guessable from the endpoint URL alone; see [Troubleshooting](#troubleshooting) if you add another Azure model and it 404s.
+
+**Direct Anthropic API access is intentionally not a default path.** The orchestrator never auto-selects it — `design` and `creative` are the only routes that use it, and both are only reached if a caller explicitly asks for that `cloudIntent`. Nothing in intent classification or GPU-saturation fallback resolves to Anthropic.
+
+A **separate** Azure AI Speech resource (classic Cognitive Services Speech, region-keyed REST API — nothing to do with the Foundry endpoint above) handles advanced voice work beyond XTTS: heavy/long-form transcription, 725 standard neural voices, and Custom Neural Voice. See [Azure AI Speech](#azure-ai-speech--advanced-ttsstt--custom-neural-voice) below.
+
+---
+
+## Intent classification and routing
+
+`POST /v1/chat` is the only route that classifies — every other route (`/v1/tts`, `/v1/rag`, `/v1/image`, etc.) is hit directly because the caller already knows what it wants.
+
+1. `entryAgent.classify()` sends the conversation to `phi4-mini:latest` via Ollama with a system prompt listing 12 intents, and gets back `{intent, confidence, reasoning}`.
+2. `chat.ts` looks up the matching agent (`reasoningAgent`, `statsAgent`, `ragAgent`, `codingAgent`, `mathAgent`, `imageAgentHigh/Low`, `visionAgent`, `cloudAgent`, or `entryAgent` itself for `general`).
+3. For agents that need Ollama (`reasoning_heavy`, `stats`, `rag`, `coding`, `math`, `general`), the orchestrator checks GPU saturation first — see below.
+4. The selected agent executes and returns a normalized response, with the classification metadata attached.
+
+Callers can skip classification entirely by passing `agent` or `intent` directly in the request body.
+
+---
+
+## GPU saturation handling
+
+`containerManager.checkGpuStatus()` reads `nvidia-smi` and treats the GPU as saturated if **either** compute utilization **or** VRAM usage crosses `APLUS_GPU_SATURATION_THRESHOLD` (default 90%).
+
+When a chat request needs Ollama and the GPU looks saturated, the orchestrator doesn't immediately give up and go to cloud — it first calls `freeGpuHeadroom()`, which stops the XTTS container **if it's idle** (XTTS is the only other Docker service that competes for GPU memory; the embeddings service and ChromaDB are CPU-only). Only if that isn't enough does the request escalate to cloud, mapped through `INTENT_TO_CLOUD_ROUTE` (e.g. `reasoning_heavy` → `heavy_reasoning`, `coding` → `major_code`, everything else → `mid_reasoning`).
+
+XTTS won't be stopped mid-synthesis — an in-flight request counter (`beginRequest`/`endRequest`) protects long-running jobs (like narrating a full audiobook chapter) from being killed by either this recovery logic or the idle-timeout auto-stop below.
+
+---
+
+## Container lifecycle
+
+`containerManager.ts` manages the four Docker services (`ollama`, `xtts`, `onnx-runtime`, `chromadb`) via `docker compose`:
+
+- **Auto-start**: any route that needs a container calls `ensureRunning(service)`, which starts it if it's not already up and healthy, and waits (`APLUS_CONTAINER_STARTUP_TIMEOUT_MS` / `APLUS_CONTAINER_HEALTH_RETRIES`) for its healthcheck to pass.
+- **Auto-stop**: an idle-polling loop stops any container that hasn't been used in `APLUS_CONTAINER_IDLE_TIMEOUT_MS` (default 10 minutes) — skipped for any container with an in-flight request.
+- Both are controlled by `APLUS_CONTAINER_AUTO_START` / `APLUS_CONTAINER_AUTO_STOP`.
+
+`GET /v1/containers` and `GET /v1/gpu` expose current state; `POST /v1/containers/:service/{start,stop,restart}` let you manage them manually.
+
+---
+
+## Agent & model configuration
+
+Every agent's identity — model, runtime, capabilities — is read from **`src/config/agentProfiles.json`** at module load time via `src/config/agentRegistry.ts`. This is the single source of truth: change a model there and every agent, the `GET /v1/agents` listing, and response metadata all follow automatically. `src/config/modelRegistry.json` backs `GET /v1/models` (merged with live Ollama models and whatever's currently loaded in LM Studio).
+
+Older, now-unused copies of these config files (and a `routingTable.json` that was never actually read by any code) live under `requirements/archive/` for reference.
+
+---
+
+## API reference
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/v1/chat` | Chat completion (streaming or blocking) |
-| `POST` | `/v1/complete` | Raw text completion |
-| `POST` | `/v1/embed` | Text embedding via ONNX or Ollama |
-| `POST` | `/v1/tts` | Text-to-speech via XTTS |
-| `POST` | `/v1/rag/query` | RAG-augmented query |
-| `POST` | `/v1/rag/ingest` | Ingest document into ChromaDB |
-| `GET` | `/health` | Aggregate health of all backends |
-| `GET` | `/v1/models` | List available models across all runtimes |
-| `GET` | `/v1/agents` | List configured agent profiles |
+| `GET` | `/v1/health` | Aggregate health of Ollama, LM Studio, XTTS, embeddings, ChromaDB (`?full=true` forces a fresh check) |
+| `GET` | `/v1/models` | Live Ollama models + LM Studio's loaded model + the static model catalog |
+| `GET` | `/v1/agents` | Configured agent profiles from `agentProfiles.json` |
+| `POST` | `/v1/chat` | Classifies intent (or honors `agent`/`intent` override) and routes accordingly |
+| `POST` | `/v1/rag` | `{action: 'query'}` (default) or `{action: 'ingest'}` against ChromaDB |
+| `POST` | `/v1/stt` | Speech-to-text via Azure (`{audio: <base64>}`) |
+| `POST` | `/v1/tts` | Text-to-speech via XTTS (`{text, voiceRef?, language?}`) |
+| `POST` | `/v1/image` | Image description via Ollama (`{quality: 'high' \| 'low'}`) |
+| `POST` | `/v1/code` | Coding tasks via Ollama |
+| `POST` | `/v1/vision` | Image understanding via LM Studio (falls back to Ollama) |
+| `POST` | `/v1/cloud` | Direct cloud dispatch by `cloudIntent` (see [Cloud routing](#cloud-routing)) |
+| `POST` | `/v1/speech/tts` | Advanced TTS via Azure AI Speech (`{text, voice?}`) |
+| `POST` | `/v1/speech/stt` | Advanced STT via Azure AI Speech (`{audio: <base64>, language?}`) |
+| `GET` | `/v1/speech/cnv` | List Custom Neural Voice projects |
+| `POST` | `/v1/speech/cnv` | Synthesize with a deployed custom voice (`{text, deploymentId, voiceName}`) |
+| `GET` | `/v1/containers` | Status of all managed Docker containers |
+| `POST` | `/v1/containers/:service/start` `/stop` `/restart` | Manual container control (`service` ∈ `ollama`, `xtts`, `onnx-runtime`, `chromadb`) |
+| `GET` | `/v1/gpu` | Current GPU utilization/VRAM/saturation status |
+
+All `/v1/*` routes pass through rate limiting (`express-rate-limit`, configurable via `APLUS_RATE_LIMIT_REQUESTS`/`APLUS_RATE_LIMIT_WINDOW_MS`) and an optional bearer-token auth middleware — auth is a no-op if `ORCHESTRATOR_API_KEY` isn't set.
 
 ---
 
-### LM Studio — Manual Heavy-Model Runtime
-
-LM Studio handles **large, quantized models** (e.g., 70B+ parameter models, multimodal models) that require manual loading through its GUI or CLI. This is a **deliberate design choice** — these models consume significant VRAM and are loaded on demand, not always-on.
-
-**Default endpoint:** `http://<tailscale-host>:your-lmstudio-port`
-
-**Characteristics:**
-
-- Models are loaded manually via the LM Studio desktop app or `lms` CLI
-- Exposes an OpenAI-compatible API (`/v1/chat/completions`, `/v1/completions`)
-- The orchestrator polls `/v1/models` to detect when a model is active
-- If no model is loaded, orchestrator returns a `503 Service Unavailable` with a descriptive message
-- Suitable for: long-context reasoning, code generation, multimodal tasks
-
-**Orchestrator behavior when LM Studio has no model loaded:**
-
-```json
-{
-  "error": "lmstudio_unavailable",
-  "message": "No model is currently loaded in LM Studio. Please load a model manually.",
-  "fallback": "ollama"
-}
-```
-
-If `routing.lmstudio.allow_fallback` is `true` in config, the orchestrator will automatically downgrade the request to Ollama.
-
-**Supported model families (examples):**
-
-- `Llama-3.3-70B-Instruct` (GGUF Q4/Q5)
-- `Qwen2.5-72B-Instruct`
-- `Mistral-Large`
-- `LLaVA` / `BakLLaVA` (multimodal)
-
----
-
-### Ollama — Hot-Swap Runtime
-
-Ollama serves as the **always-on, hot-swap** inference backend for lightweight to mid-size models. It runs as a system service and supports pulling, running, and switching models at runtime via API.
-
-**Default endpoint:** `http://<tailscale-host>:your-ollama-port`
-
-**Characteristics:**
-
-- Always running; models are pulled on first use or pre-staged
-- Exposes a native Ollama API and an OpenAI-compatible shim at `/v1/`
-- Models are hot-swapped by specifying the model name in the request — no restart required
-- GPU layers are automatically managed; CPU fallback is supported
-- Suitable for: fast chat, summarization, classification, embeddings, always-on agents
-
-**Managing models via orchestrator:**
-
-```bash
-# List available models
-GET /v1/models?runtime=ollama
-
-# Pull a new model (async, streamed progress)
-POST /v1/runtime/ollama/pull
-{ "model": "llama3.2:3b" }
-
-# Delete a model
-DELETE /v1/runtime/ollama/model/:name
-```
-
-**Recommended always-available models:**
-
-| Model | Use Case | Size |
-|---|---|---|
-| `llama3.2:3b` | Fast chat; routing decisions | ~2 GB |
-| `mistral:7b` | General reasoning; summarization | ~4 GB |
-| `nomic-embed-text` | Text embeddings (RAG) | ~274 MB |
-| `phi4:14b` | Code; structured output | ~9 GB |
-| `qwen2.5-coder:7b` | Code completion | ~5 GB |
-
----
-
-### XTTS — Text-to-Speech Service
-
-XTTS (Coqui XTTS-v2) provides high-quality, cloneable neural text-to-speech. It runs as a **Docker container** on the TW host.
-
-**Default endpoint:** `http://<tailscale-host>:your-xtts-port`
-
-**Docker service name:** `xtts`
-
-**Capabilities:**
-
-- Multi-lingual TTS (17+ languages)
-- Speaker voice cloning from a short audio reference clip
-- Streaming audio output (WAV chunks)
-- Per-agent voice profiles stored in `config/voices/`
-
-**Orchestrator TTS endpoint:**
-
-```http
-POST /v1/tts
-Content-Type: application/json
-
-{
-  "text": "Hello, this is the TW assistant.",
-  "agent": "aplus-assistant",
-  "language": "en",
-  "stream": true
-}
-```
-
-**Voice reference files** are mapped at container startup:
-
-```yaml
-# docker-compose.yml excerpt
-volumes:
-  - ./config/voices:/app/voices:ro
-```
-
-**Speaker reference naming convention:**
-
-```
-config/voices/<agent-id>/<speaker-name>.wav
-```
-
----
-
-### ONNX Runtime — Inference Service
-
-ONNX Runtime handles **specialized, optimized inference workloads** — primarily fast embedding generation and classification tasks — using exported ONNX model files.
-
-**Default endpoint:** `http://<tailscale-host>:your-onnx-port`
-
-**Docker service name:** `onnx-runtime`
-
-**Primary use cases:**
-
-| Task | Model Example |
-|---|---|
-| Sentence embeddings | `all-MiniLM-L6-v2` (ONNX export) |
-| Cross-encoder reranking | `ms-marco-MiniLM-L-6-v2` |
-| NER / classification | Custom fine-tuned ONNX models |
-
-**Orchestrator embedding endpoint:**
-
-```http
-POST /v1/embed
-Content-Type: application/json
-
-{
-  "input": ["chunk of text to embed"],
-  "model": "all-MiniLM-L6-v2",
-  "runtime": "onnx"
-}
-```
-
-ONNX models are stored in and served from `models/onnx/`. The container mounts this directory read-only at startup.
-
----
-
-### ChromaDB — Vector Store
-
-ChromaDB is the **persistent vector database** powering all RAG workflows. It stores document embeddings and metadata, and is queried by the orchestrator before each RAG-enabled agent response.
-
-**Default endpoint:** `http://<tailscale-host>:your-chromadb-port`
-
-**Docker service name:** `chromadb`
-
-**Collections naming convention:**
-
-```
-<agent-id>_<namespace>
-# Examples:
-aplus-assistant_docs
-aplus-coder_codebase
-aplus-assistant_meetings
-```
-
-**Ingesting a document:**
-
-```http
-POST /v1/rag/ingest
-Content-Type: application/json
-
-{
-  "agent": "aplus-assistant",
-  "namespace": "docs",
-  "source": "project-notes.pdf",
-  "content": "...",
-  "chunk_size": 512,
-  "chunk_overlap": 64
-}
-```
-
-**ChromaDB data persistence:** The Docker volume `chromadb_data` is mounted to `./data/chromadb` on the host for durable storage across container restarts.
-
----
-
-## Tailscale Network & Endpoints
-
-All services communicate over a **private Tailscale mesh network (aplus)**. No service port is exposed to the public internet. Tailscale MagicDNS provides stable hostnames.
-
-| Host Alias | Tailscale Hostname | Role |
-|---|---|---|
-| `aplus-main` | `aplus-main.tail<id>.ts.net` | Primary GPU host; LM Studio + Ollama + Docker services |
-| `aplus-relay` | `aplus-relay.tail<id>.ts.net` | Relay/secondary node; orchestrator can run here |
-| `aplus-client` | `aplus-client.tail<id>.ts.net` | Client machines (UI, CLI tools) |
-
-**Service endpoint map (resolved via Tailscale DNS):**
-
-```
-Orchestrator   →  http://aplus-main:3200
-LM Studio      →  http://aplus-main:your-lmstudio-port
-Ollama         →  http://aplus-main:your-ollama-port
-XTTS           →  http://aplus-main:your-xtts-port
-ONNX Runtime   →  http://aplus-main:your-onnx-port
-ChromaDB       →  http://aplus-main:your-chromadb-port
-```
-
-**Firewall / ACL policy (Tailscale ACL excerpt):**
-
-```json
-{
-  "acls": [
-    {
-      "action": "accept",
-      "src": ["tag:aplus-client"],
-      "dst": ["tag:aplus-main:3200"]
-    },
-    {
-      "action": "accept",
-      "src": ["tag:aplus-main"],
-      "dst": ["tag:aplus-main:your-lmstudio-port", "tag:aplus-main:your-ollama-port",
-               "tag:aplus-main:your-xtts-port", "tag:aplus-main:your-chromadb-port",
-               "tag:aplus-main:your-onnx-port"]
-    }
-  ]
-}
-```
-
-> **Note:** Clients should only ever connect to port `3200` (the orchestrator). Direct access to backend ports is restricted to the orchestrator host via Tailscale ACLs.
-
----
-
-## Routing Logic
-
-The orchestrator applies a multi-pass routing decision tree to determine which backend handles each request.
-
-### Decision Tree
-
-```
-Incoming Request
-       │
-       ▼
-1. Resolve Agent Profile
-       │
-       ├─ Agent specifies `runtime: lmstudio`  ──► Check LM Studio health
-       │                                             ├─ Model loaded? ──► Route to LM Studio
-       │                                             └─ No model?  ──► fallback_to_ollama?
-       │                                                                 ├─ yes ──► Route to Ollama
-       │                                                                 └─ no  ──► 503
-       │
-       ├─ Agent specifies `runtime: ollama`    ──► Route to Ollama
-       │
-       ├─ Agent specifies `runtime: auto`      ──► Apply auto-routing rules (see below)
-       │
-       └─ No agent specified                  ──► Use default agent profile
-```
-
-### Auto-Routing Rules (`runtime: auto`)
-
-| Condition | Selected Backend |
-|---|---|
-| `estimated_tokens > 8192` | LM Studio (if available) |
-| `task_type: code` | LM Studio preferred; Ollama fallback |
-| `task_type: embedding` | ONNX Runtime (fast); Ollama fallback |
-| `task_type: tts` | XTTS |
-| `rag_enabled: true` | ChromaDB query → then model backend |
-| LM Studio unavailable | Ollama |
-| Ollama model not pulled | Pull triggered async; queue request |
-
-### Routing Configuration (`config/routing.yaml`)
-
-```yaml
-routing:
-  default_runtime: auto
-  lmstudio:
-    host: http://aplus-main:your-lmstudio-port
-    allow_fallback: true
-    health_poll_interval_ms: 10000
-  ollama:
-    host: http://aplus-main:your-ollama-port
-    default_model: mistral:7b
-    pull_on_miss: true
-  token_threshold_for_heavy: 8192
-  task_routing:
-    code: lmstudio
-    embedding: onnx
-    tts: xtts
-    chat: auto
-    summarize: ollama
-```
-
----
-
-## Agent Profiles
-
-Agent profiles define the complete persona, capability set, and backend configuration for a named AI agent. They live in `config/agents/` as individual YAML files.
-
-### Profile Schema
-
-```yaml
-# config/agents/<agent-id>.yaml
-id: aplus-assistant
-name: APlus Assistant
-description: General-purpose assistant for the TW home network
-
-model:
-  runtime: auto                    # auto | ollama | lmstudio | onnx
-  preferred: llama3.2:3b           # preferred model name
-  fallback: mistral:7b             # fallback if preferred unavailable
-  lmstudio_model: Llama-3.3-70B-Instruct-Q4_K_M.gguf
-
-system_prompt: |
-  You are the TW assistant — a helpful, concise AI running entirely
-  on local hardware. You have access to network documentation, notes,
-  and project files. Never fabricate facts; say "I don't know" if unsure.
-
-context_window: 8192
-temperature: 0.7
-top_p: 0.9
-max_tokens: 2048
-
-rag:
-  enabled: true
-  collection: aplus-assistant_docs
-  top_k: 5
-  score_threshold: 0.72
-  embed_runtime: onnx              # onnx | ollama
-
-tts:
-  enabled: true
-  voice_ref: config/voices/aplus-assistant/default.wav
-  language: en
-
-stream: true
-```
-
-### Built-in Agent Profiles
-
-| Agent ID | Purpose | Runtime | RAG | TTS |
-|---|---|---|---|---|
-| `aplus-assistant` | General home network assistant | auto | ✅ | ✅ |
-| `aplus-coder` | Code generation and review | lmstudio | ✅ | ❌ |
-| `aplus-summarizer` | Document and meeting summarization | ollama | ❌ | ❌ |
-| `aplus-voice` | Voice-first conversational agent | auto | ✅ | ✅ |
-| `aplus-rag-only` | Pure retrieval — no generation | onnx | ✅ | ❌ |
-
----
-
-## Configuration Files
-
-```
-config/
-├── routing.yaml          # Backend routing rules and thresholds
-├── server.yaml           # Orchestrator server settings (port, rate limits, auth)
-├── docker.yaml           # Docker service definitions reference
-├── agents/               # One YAML file per agent profile
-│   ├── aplus-assistant.yaml
-│   ├── aplus-coder.yaml
-│   ├── aplus-summarizer.yaml
-│   ├── aplus-voice.yaml
-│   └── aplus-rag-only.yaml
-└── voices/               # XTTS speaker reference audio files
-    └── aplus-assistant/
-        └── default.wav
-```
-
-### `config/server.yaml`
-
-```yaml
-server:
-  port: 3200
-  host: 0.0.0.0
-  log_level: info           # debug | info | warn | error
-  request_timeout_ms: 120000
-
-auth:
-  enabled: true
-  type: bearer              # bearer | none
-  token_env: ORCHESTRATOR_API_KEY
-
-rate_limit:
-  enabled: true
-  window_ms: 60000
-  max_requests: 120
-
-cors:
-  enabled: true
-  allowed_origins:
-    - http://aplus-main:3200
-    - http://aplus-client
-```
-
-### `.env`
-
-```env
-# Orchestrator
-ORCHESTRATOR_API_KEY=your-secret-key-here
-PORT=3200
-
-# LM Studio
-LMSTUDIO_HOST=http://aplus-main:your-lmstudio-port
-
-# Ollama
-OLLAMA_HOST=http://aplus-main:your-ollama-port
-OLLAMA_DEFAULT_MODEL=mistral:7b
-
-# XTTS
-XTTS_HOST=http://aplus-main:your-xtts-port
-
-# ONNX Runtime
-ONNX_HOST=http://aplus-main:your-onnx-port
-
-# ChromaDB
-CHROMA_HOST=http://aplus-main:your-chromadb-port
-CHROMA_TENANT=default_tenant
-CHROMA_DATABASE=default_database
-
-# Logging
-LOG_LEVEL=info
-NODE_ENV=production
-```
-
-> **Security:** Never commit `.env` to version control. A `.env.example` is provided with all keys and empty values.
-
----
-
-## Directory Structure
+## Directory structure
 
 ```text
 tw-localllm-orchestrator/
 ├── src/
-│   ├── server.js               # Express app entry point
-│   ├── router.js               # Main request router
-│   ├── middleware/
-│   │   ├── auth.js             # Bearer token authentication
-│   │   ├── rateLimiter.js      # Rate limiting middleware
-│   │   └── logger.js           # Request logging (Morgan)
-│   ├── services/
-│   │   ├── lmstudio.js         # LM Studio API client
-│   │   ├── ollama.js           # Ollama API client
-│   │   ├── xtts.js             # XTTS API client
-│   │   ├── onnx.js             # ONNX Runtime API client
-│   │   └── chroma.js           # ChromaDB client (RAG)
-│   ├── agents/
-│   │   ├── loader.js           # Agent profile loader and validator
-│   │   └── resolver.js         # Agent selection logic
-│   ├── routing/
-│   │   ├── rules.js            # Routing rule engine
-│   │   └── health.js           # Backend health checker
-│   └── utils/
-│       ├── tokenEstimator.js   # Rough token count estimator
-│       ├── chunker.js          # Text chunking for RAG ingestion
-│       └── streamBridge.js     # SSE streaming passthrough
-├── config/
-│   ├── routing.yaml
-│   ├── server.yaml
-│   ├── agents/
-│   └── voices/
-├── models/
-│   └── onnx/                   # ONNX model files (gitignored, large)
-├── data/
-│   └── chromadb/               # ChromaDB persistent volume (gitignored)
+│   ├── server.ts               # Express app, middleware, route wiring, graceful shutdown
+│   ├── config/
+│   │   ├── index.ts            # Env-driven runtime config
+│   │   ├── agentRegistry.ts    # getAgentProfile() loader over agentProfiles.json
+│   │   ├── agentProfiles.json  # Source of truth: agent name → model/runtime/capabilities
+│   │   └── modelRegistry.json  # Descriptive model catalog for GET /v1/models
+│   ├── agents/                 # One file per agent: entry, reasoning, stats, rag, coding,
+│   │                           #   math, imageHigh/Low, vision, speech, tts, cloud,
+│   │                           #   azureSpeechTts, azureSpeechStt
+│   ├── models/                 # Thin HTTP clients: ollama, lmstudio, xtts, onnx
+│   ├── cloud/                  # azure.ts, azureSpeech.ts, anthropic.ts clients
+│   ├── routes/                 # One file per HTTP endpoint (speech.ts covers all three /v1/speech/* routes)
+│   ├── tools/                  # containerManager, health polling, rag (ChromaDB), logger
+│   ├── middleware/              # auth, rateLimit, errorHandler
+│   └── types/                  # Shared TypeScript interfaces
 ├── docker/
-│   ├── docker-compose.yml      # ChromaDB, XTTS, ONNX Runtime
-│   ├── xtts/
-│   │   └── Dockerfile
-│   └── onnx/
-│       └── Dockerfile
-├── scripts/
-│   ├── pull-models.sh          # Pull recommended Ollama models
-│   ├── healthcheck.sh          # Check all backend endpoints
-│   └── ingest-docs.sh          # Batch ingest documents into ChromaDB
+│   ├── docker-compose.yml           # All four services together
+│   ├── docker-compose.{ollama,xtts,onnx,chromadb}.yml   # Run one service standalone
+│   └── config/voices/                # XTTS voice reference clips (gitignored)
+├── docs/
+│   └── DOCKER-HOWTO.md          # Beginner-friendly Docker walkthrough for this project
+├── requirements/
+│   ├── markdown/                # Original design/spec documents
+│   └── archive/                 # Superseded JSON configs, kept for reference
 ├── .env.example
-├── .gitignore
-├── package.json
-├── package-lock.json
-└── README.md
+└── package.json
 ```
 
 ---
 
-## Setup & Installation
+## Setup
 
 ### Prerequisites
 
-| Requirement | Version | Notes |
-|---|---|---|
-| Node.js | ≥ 20.x | LTS recommended |
-| Docker + Docker Compose | ≥ 24.x | For XTTS, ONNX, ChromaDB |
-| Ollama | Latest | Install from ollama.com |
-| LM Studio | Latest | Install from lmstudio.ai |
-| Tailscale | Latest | TW mesh must be active |
+- Node.js ≥ 20
+- Docker Desktop (with WSL2 GPU passthrough on Windows, if you want GPU acceleration)
+- [Ollama](https://ollama.com) models pulled locally for whatever `agentProfiles.json` expects
+- LM Studio (optional — only needed for `reasoning_heavy`/`stats`/`vision` without cloud fallback)
+- An NVIDIA GPU is optional but expected for XTTS/Ollama performance; CPU-only works, just slower
 
-### Step 1 — Clone the Repository
-
-```bash
-git clone https://github.com/<your-org>/tw-localllm-orchestrator.git
-cd tw-localllm-orchestrator
-```
-
-### Step 2 — Install Node.js Dependencies
+### Steps
 
 ```bash
 npm install
-```
-
-### Step 3 — Configure Environment
-
-```bash
 cp .env.example .env
-# Edit .env with your Tailscale hostnames, API keys, and preferred models
-nano .env
-```
+# Edit .env — at minimum, review APLUS_* ports and, if you want cloud routing,
+# AZURE_OPENAI_* / ANTHROPIC_API_KEY / AZURE_SPEECH_*
 
-### Step 4 — Start Docker Services (ChromaDB, XTTS, ONNX Runtime)
-
-```bash
 cd docker
 docker compose up -d
 cd ..
 
-# Verify services are up
-docker compose -f docker/docker-compose.yml ps
+npm run dev     # ts-node with watch, for development
+# or
+npm run build && npm start   # compiled production run
 ```
 
-**`docker/docker-compose.yml`:**
+The server starts on `APLUS_ORCHESTRATOR_PORT` (default `3200`), and begins polling backend health and idle containers immediately.
 
-```yaml
-version: "3.9"
-
-services:
-  chromadb:
-    image: chromadb/chroma:latest
-    container_name: chromadb
-    ports:
-      - "your-chromadb-port:your-chromadb-port"
-    volumes:
-      - ../data/chromadb:/chroma/chroma
-    environment:
-      IS_PERSISTENT: "TRUE"
-      ANONYMIZED_TELEMETRY: "FALSE"
-    restart: unless-stopped
-
-  xtts:
-    build: ./xtts
-    container_name: xtts
-    ports:
-      - "your-xtts-port:your-xtts-port"
-    volumes:
-      - ../config/voices:/app/voices:ro
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - capabilities: [gpu]
-    restart: unless-stopped
-
-  onnx-runtime:
-    build: ./onnx
-    container_name: onnx-runtime
-    ports:
-      - "your-onnx-port:your-onnx-port"
-    volumes:
-      - ../models/onnx:/app/models:ro
-    restart: unless-stopped
-
-networks:
-  default:
-    name: aplus-local
-```
-
-### Step 5 — Start Ollama and Pull Models
-
-```bash
-# Ensure Ollama service is running
-ollama serve &
-
-# Pull recommended models
-bash scripts/pull-models.sh
-```
-
-**`scripts/pull-models.sh`:**
-
-```bash
-#!/usr/bin/env bash
-set -e
-echo "Pulling recommended TW Ollama models..."
-ollama pull llama3.2:3b
-ollama pull mistral:7b
-ollama pull nomic-embed-text
-ollama pull phi4:14b
-ollama pull qwen2.5-coder:7b
-echo "Done."
-```
-
-### Step 6 — Start LM Studio (Manual)
-
-1. Open LM Studio on the GPU host
-2. Navigate to the **Local Server** tab
-3. Select your preferred heavy model (e.g., `Llama-3.3-70B-Instruct-Q4_K_M`)
-4. Click **Start Server** — LM Studio will listen on port `your-lmstudio-port`
-
-> LM Studio does **not** need to be running for the orchestrator to start. Requests requiring LM Studio will fall back to Ollama based on `routing.yaml` settings.
-
-### Step 7 — Start the Orchestrator
-
-```bash
-# Development (with auto-reload)
-npm run dev
-
-# Production
-npm start
-```
-
-The orchestrator starts on port `3200` and performs an initial health check of all configured backends.
-
-### Step 8 — Verify the Installation
-
-```bash
-bash scripts/healthcheck.sh
-```
-
-Expected output:
-
-```
-[✓] Orchestrator    http://aplus-main:3200  — OK
-[✓] Ollama          http://aplus-main:your-ollama-port — OK (5 models loaded)
-[~] LM Studio       http://aplus-main:your-lmstudio-port  — No model loaded (optional)
-[✓] XTTS            http://aplus-main:your-xtts-port  — OK
-[✓] ONNX Runtime    http://aplus-main:your-onnx-port  — OK
-[✓] ChromaDB        http://aplus-main:your-chromadb-port  — OK (3 collections)
-```
-
-### Step 9 — Ingest Documents (Optional)
-
-```bash
-bash scripts/ingest-docs.sh --agent aplus-assistant --namespace docs --dir ./my-docs/
-```
+See `docs/DOCKER-HOWTO.md` for a from-scratch Docker walkthrough, including GPU troubleshooting and how to manage Ollama models inside the container.
 
 ---
 
-## Usage Examples
+## Usage examples
 
-### Chat with Default Agent
+### Chat (auto-classified)
 
 ```bash
-curl -s -X POST http://aplus-main:3200/v1/chat \
-  -H "Authorization: Bearer $ORCHESTRATOR_API_KEY" \
+curl -s -X POST http://localhost:3200/v1/chat \
   -H "Content-Type: application/json" \
-  -d '{
-    "agent": "aplus-assistant",
-    "messages": [
-      {"role": "user", "content": "Summarize our last network maintenance notes."}
-    ],
-    "stream": false
-  }'
+  -d '{"messages": [{"role": "user", "content": "Write a function to reverse a linked list"}]}'
 ```
 
-### Streaming Chat Response
+### Chat (explicit agent, skips classification)
 
 ```bash
-curl -N -X POST http://aplus-main:3200/v1/chat \
-  -H "Authorization: Bearer $ORCHESTRATOR_API_KEY" \
+curl -s -X POST http://localhost:3200/v1/chat \
   -H "Content-Type: application/json" \
-  -d '{
-    "agent": "aplus-coder",
-    "messages": [
-      {"role": "user", "content": "Write a Python script to monitor disk usage."}
-    ],
-    "stream": true
-  }'
+  -d '{"agent": "coding", "messages": [{"role": "user", "content": "..."}]}'
 ```
 
-### Text-to-Speech
+### Text-to-speech with your cloned voice
 
 ```bash
-curl -X POST http://aplus-main:3200/v1/tts \
-  -H "Authorization: Bearer $ORCHESTRATOR_API_KEY" \
+curl -s -X POST http://localhost:3200/v1/tts \
   -H "Content-Type: application/json" \
-  -d '{
-    "agent": "aplus-voice",
-    "text": "All systems are operating normally.",
-    "stream": false
-  }' --output response.wav
+  -d '{"text": "Chapter one.", "voiceRef": "terence"}' \
+  --output chapter1.wav
 ```
 
-### Generate Embeddings
+### Advanced TTS via Azure AI Speech
 
 ```bash
-curl -X POST http://aplus-main:3200/v1/embed \
-  -H "Authorization: Bearer $ORCHESTRATOR_API_KEY" \
+curl -s -X POST http://localhost:3200/v1/speech/tts \
   -H "Content-Type: application/json" \
-  -d '{
-    "input": ["TW orchestrator setup guide"],
-    "runtime": "onnx"
-  }'
+  -d '{"text": "Chapter one.", "voice": "en-US-GuyNeural"}' \
+  --output chapter1-azure.wav
 ```
 
-### RAG-Augmented Query
+### Explicit cloud call
 
 ```bash
-curl -X POST http://aplus-main:3200/v1/rag/query \
-  -H "Authorization: Bearer $ORCHESTRATOR_API_KEY" \
+curl -s -X POST http://localhost:3200/v1/cloud \
   -H "Content-Type: application/json" \
-  -d '{
-    "agent": "aplus-assistant",
-    "namespace": "docs",
-    "query": "What is the Tailscale ACL policy for aplus-client?",
-    "top_k": 5
-  }'
+  -d '{"cloudIntent": "heavy_reasoning", "messages": [{"role": "user", "content": "..."}]}'
 ```
 
-### Check System Health
+### Health and container status
 
 ```bash
-curl http://aplus-main:3200/health \
-  -H "Authorization: Bearer $ORCHESTRATOR_API_KEY"
+curl -s http://localhost:3200/v1/health
+curl -s http://localhost:3200/v1/containers
+curl -s http://localhost:3200/v1/gpu
 ```
 
 ---
 
 ## Troubleshooting
 
-### Orchestrator Cannot Reach Ollama
+**"Cannot connect to the Docker daemon"** — Docker Desktop isn't running. See `docs/DOCKER-HOWTO.md`.
 
-```
-Error: connect ECONNREFUSED aplus-main:your-ollama-port
-```
+**A container reports unhealthy right after starting** — `docker inspect` needs a moment for the healthcheck to run at least once; `ensureRunning` polls for this, but very slow-booting images (XTTS on first cold start, downloading the model) may need `APLUS_CONTAINER_HEALTH_RETRIES` raised. Also: recent `chromadb/chroma` and `ollama/ollama` images both dropped `curl` entirely, and Chroma deprecated its `/api/v1` routes server-side — if you rebuild these healthchecks from scratch, `chromadb`'s uses bash's `/dev/tcp` against `/api/v2/heartbeat` (its default shell is dash, which doesn't support `/dev/tcp` — the healthcheck explicitly invokes `bash -c`), and `ollama`'s just runs `ollama list`.
 
-- Verify Ollama is running: `ollama list`
-- Check Tailscale connectivity: `tailscale ping aplus-main`
-- Ensure `OLLAMA_HOST` in `.env` uses the correct Tailscale hostname
+**GPU passthrough issues with Ollama or XTTS** — remove the `deploy.resources.reservations.devices: [gpu]` block from the relevant service in `docker/docker-compose.yml` to force CPU mode.
 
-### LM Studio Returns 503
+**`/v1/stt` fails immediately** — Azure isn't configured yet (`AZURE_OPENAI_API_KEY` missing), or the deployment name doesn't match what's actually deployed. There is no working local STT fallback.
 
-- LM Studio does not have a model loaded — open LM Studio and start the server with a model
-- If `allow_fallback: true` is set in `config/routing.yaml`, requests will route to Ollama automatically
-
-### XTTS Container Not Starting
-
-```bash
-docker logs xtts
-```
-
-- GPU passthrough may not be configured; remove the `deploy.resources` section in `docker-compose.yml` for CPU-only mode
-- Voice reference file must exist at `config/voices/<agent-id>/default.wav`
-
-### ChromaDB Collection Not Found
-
-```
-ValueError: Collection aplus-assistant_docs does not exist.
-```
-
-- Run the ingest script first: `bash scripts/ingest-docs.sh`
-- Or trigger ingestion via API: `POST /v1/rag/ingest` with initial content
-
-### Rate Limit Exceeded
-
-```json
-{ "error": "Too many requests", "retryAfter": 60 }
-```
-
-- Increase `rate_limit.max_requests` in `config/server.yaml`
-- Implement client-side retry with exponential backoff
-
-### Slow Response Times
-
-- Confirm ONNX Runtime is handling embeddings — set `embed_runtime: onnx` in the agent profile
-- Reduce `top_k` in RAG settings to retrieve fewer chunks
-- Verify GPU acceleration is active for Ollama: `ollama ps`
+**Cloud calls fail with a 401/404, especially after adding a new Azure model** — don't assume the endpoint shape. In this project alone, three genuinely different wire protocols turned up on `AZURE_OPENAI_ENDPOINT` depending on the model: the unified `{endpoint}/chat/completions` route for OpenAI/Foundry-catalog models, a completely different host and the native Anthropic Messages API for Claude models, and the classic per-deployment `/openai/deployments/{model}/...` path (with its own required `api-version`) for audio. The Azure AI Speech resource is a fourth, unrelated shape again (region-based hosts, `Ocp-Apim-Subscription-Key` header, no relation to the Foundry `/models` endpoint the portal shows you). When in doubt, test directly against the endpoint with curl/axios before wiring anything into the client code — every integration in this project was verified live before being trusted.
 
 ---
 
-## Contributing
-
-This is an internal @AplUSAndmINUS project. To propose changes:
-
-1. Create a feature branch: `git checkout -b feature/your-change`
-2. Make your changes and test locally with `npm run dev`
-3. Run the health check script to confirm no regressions: `bash scripts/healthcheck.sh`
-4. Submit a pull request with a clear description of the change and any updated configuration schema
-
----
-
-*AplUSAndmINUS Local LLM Orchestration System — all inference, all local, all the time.*
+*Personal local LLM orchestration — local by default, cloud when it's worth it.*

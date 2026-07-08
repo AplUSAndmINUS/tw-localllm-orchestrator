@@ -35,6 +35,18 @@ const AGENT_MAP: Record<string, Agent> = {
   general: entryAgent,
 };
 
+// CloudAgent's routes use their own cloud-capability vocabulary (see
+// agentProfiles.json CloudAgent.routes), not the local intent names above —
+// this maps a saturated-GPU escalation to the closest cloud tier.
+const INTENT_TO_CLOUD_ROUTE: Record<string, string> = {
+  reasoning_heavy: 'heavy_reasoning',
+  stats: 'mid_reasoning',
+  rag: 'mid_reasoning',
+  coding: 'major_code',
+  math: 'mid_reasoning',
+  general: 'mid_reasoning',
+};
+
 async function chatRoute(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { messages, model, agent: agentOverride, intent: intentOverride, stream, options = {} } = req.body;
@@ -65,12 +77,16 @@ async function chatRoute(req: Request, res: Response, next: NextFunction): Promi
 
     const requiredContainer = INTENT_CONTAINER_MAP[intent!];
     if (requiredContainer) {
-      if (containerManager.isGpuSaturated() && AGENT_MAP['cloud']) {
-        logger.info('GPU saturated, routing to cloud', { intent });
-        const cloudResult = await AGENT_MAP['cloud'].execute({ messages, options, cloudIntent: intent });
-        if (classification) cloudResult.classification = classification;
-        res.json(cloudResult);
-        return;
+      if (containerManager.isGpuSaturated()) {
+        const recovered = await containerManager.freeGpuHeadroom(requiredContainer);
+        if (!recovered && AGENT_MAP['cloud']) {
+          const cloudIntent = INTENT_TO_CLOUD_ROUTE[intent!] || 'mid_reasoning';
+          logger.info('GPU saturated after recovery attempt, routing to cloud', { intent, cloudIntent });
+          const cloudResult = await AGENT_MAP['cloud'].execute({ messages, options, cloudIntent });
+          if (classification) cloudResult.classification = classification;
+          res.json(cloudResult);
+          return;
+        }
       }
       await containerManager.ensureRunning(requiredContainer);
       containerManager.recordActivity(requiredContainer);

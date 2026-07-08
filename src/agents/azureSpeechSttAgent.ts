@@ -1,21 +1,21 @@
-import * as azure from '../cloud/azure';
+import * as azureSpeech from '../cloud/azureSpeech';
 import { getAgentProfile } from '../config/agentRegistry';
 import logger from '../tools/logger';
 import httpError from '../tools/httpError';
 import { AgentResponse, AgentMetadata, AgentExecuteParams, Agent } from '../types';
 
-const AGENT_NAME = 'SpeechAgent';
+const AGENT_NAME = 'AzureSpeechSTT';
 const PROFILE = getAgentProfile(AGENT_NAME);
 const MODEL = PROFILE.model;
 const RUNTIME = PROFILE.runtime;
-const INTENT = 'speech_to_text';
+const INTENT = 'azure_stt';
 
 async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> {
   const startMs = Date.now();
 
   try {
-    if (!azure.isAvailable()) {
-      throw httpError(503, 'Azure transcription is not configured — AZURE_OPENAI_API_KEY missing', 'not_configured');
+    if (!azureSpeech.isAvailable()) {
+      throw httpError(503, 'Azure Speech is not configured — AZURE_SPEECH_API_KEY/AZURE_SPEECH_REGION missing', 'not_configured');
     }
 
     const audioInput = params.audioBuffer || params.audio;
@@ -23,29 +23,28 @@ async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> 
       throw httpError(400, 'No audio provided for speech-to-text', 'bad_request');
     }
     const audioBuffer = typeof audioInput === 'string' ? Buffer.from(audioInput, 'base64') : audioInput;
+    const language = (params.options as Record<string, unknown>)?.language as string || 'en-US';
 
-    const result = await azure.transcribe(audioBuffer, MODEL);
+    const text = await azureSpeech.transcribe(audioBuffer, language);
     const latencyMs = Date.now() - startMs;
 
-    if (!result) {
-      throw httpError(502, 'Azure transcription service failed', 'upstream_error');
+    if (text === null) {
+      throw httpError(502, 'Azure Speech transcription service failed', 'upstream_error');
     }
-
-    const text = (result as Record<string, unknown>).text;
 
     return {
       agent: AGENT_NAME,
       model: MODEL,
       intent: INTENT,
       runtime: RUNTIME,
-      content: typeof text === 'string' ? text : JSON.stringify(result),
+      content: text,
       tokens: { input: 0, output: 0 },
       latency_ms: latencyMs,
       cached: false,
     };
   } catch (err: unknown) {
     const error = err as Error;
-    logger.error('SpeechAgent execute error', { error: error.message });
+    logger.error('AzureSpeechSTT execute error', { error: error.message });
     throw err;
   }
 }

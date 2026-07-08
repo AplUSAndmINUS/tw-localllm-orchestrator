@@ -29,8 +29,10 @@ async function handleQuery(req: Request, res: Response): Promise<void> {
 
   await containerManager.ensureRunning('ollama');
   await containerManager.ensureRunning('chromadb');
+  await containerManager.ensureRunning('onnx-runtime');
   containerManager.recordActivity('ollama');
   containerManager.recordActivity('chromadb');
+  containerManager.recordActivity('onnx-runtime');
 
   const collectionName = collection || (agentId ? `${agentId}_${namespace || 'default'}` : 'default');
   const queryText = query || messages[messages.length - 1].content;
@@ -66,7 +68,9 @@ async function handleIngest(req: Request, res: Response): Promise<void> {
   }
 
   await containerManager.ensureRunning('chromadb');
+  await containerManager.ensureRunning('onnx-runtime');
   containerManager.recordActivity('chromadb');
+  containerManager.recordActivity('onnx-runtime');
 
   const collectionName = collection || (agentId ? `${agentId}_${namespace || 'default'}` : 'default');
 

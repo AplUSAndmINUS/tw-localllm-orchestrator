@@ -1,10 +1,12 @@
 import * as ollama from '../models/ollama';
+import { getAgentProfile } from '../config/agentRegistry';
 import logger from '../tools/logger';
 import { AgentResponse, AgentMetadata, AgentExecuteParams, ChatMessage, Agent, OllamaResponse } from '../types';
 
-const AGENT_NAME = 'RAGAgent';
-const MODEL = 'phi3:3.8b';
-const RUNTIME = 'ollama';
+const AGENT_NAME = 'RagAgent';
+const PROFILE = getAgentProfile(AGENT_NAME);
+const MODEL = PROFILE.model;
+const RUNTIME = PROFILE.runtime;
 const INTENT = 'rag';
 
 async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> {
@@ -53,7 +55,7 @@ async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> 
     };
   } catch (err: unknown) {
     const error = err as Error;
-    logger.error('RAGAgent execute error', { error: error.message });
+    logger.error('RagAgent execute error', { error: error.message });
     throw err;
   }
 }
@@ -63,7 +65,7 @@ const metadata: AgentMetadata = {
   intent: INTENT,
   runtime: RUNTIME,
   model: MODEL,
-  capabilities: ['retrieval_augmented_generation', 'context_grounded_answers'],
+  capabilities: PROFILE.capabilities,
 };
 
 export { execute, metadata };

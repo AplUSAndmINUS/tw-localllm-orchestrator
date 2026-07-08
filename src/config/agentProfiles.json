@@ -114,16 +114,12 @@
     },
     "SpeechAgent": {
       "agentName": "SpeechAgent",
-      "description": "Speech-to-text transcription",
-      "runtime": "ollama",
-      "model": "whisper-large:latest",
-      "endpoint": "http://${APLUS_TAILSCALE_HOST}:${APLUS_OLLAMA_PORT}",
-      "capabilities": ["stt"],
-      "costModel": "local_free",
-      "healthCheck": "/api/tags",
-      "fallbacks": {
-        "cloud": "whisper-1"
-      }
+      "description": "Speech-to-text transcription with speaker diarization via Azure",
+      "runtime": "azure",
+      "model": "gpt-4o-transcribe-diarize",
+      "endpoint": "${AZURE_OPENAI_ENDPOINT}",
+      "capabilities": ["stt", "transcription", "speaker_diarization"],
+      "costModel": "cloud_tracked"
     },
     "TTSAgent": {
       "agentName": "TTSAgent",
@@ -137,6 +133,33 @@
       "fallbacks": {
         "cloud": "gpt-4o-mini-tts"
       }
+    },
+    "AzureSpeechTTS": {
+      "agentName": "AzureSpeechTTS",
+      "description": "Advanced text-to-speech via Azure AI Speech (beyond XTTS — 725 neural voices)",
+      "runtime": "azure_speech",
+      "model": "en-US-GuyNeural",
+      "endpoint": "https://${AZURE_SPEECH_REGION}.tts.speech.microsoft.com",
+      "capabilities": ["tts", "voice_synthesis", "neural_voice"],
+      "costModel": "cloud_tracked"
+    },
+    "AzureSpeechSTT": {
+      "agentName": "AzureSpeechSTT",
+      "description": "Advanced speech-to-text via Azure AI Speech (heavy/long-form transcription)",
+      "runtime": "azure_speech",
+      "model": "azure-speech-stt",
+      "endpoint": "https://${AZURE_SPEECH_REGION}.stt.speech.microsoft.com",
+      "capabilities": ["stt", "transcription"],
+      "costModel": "cloud_tracked"
+    },
+    "AzureSpeechCNV": {
+      "agentName": "AzureSpeechCNV",
+      "description": "Custom Neural Voice management and synthesis via Azure AI Speech",
+      "runtime": "azure_speech",
+      "model": "custom-neural-voice",
+      "endpoint": "https://${AZURE_SPEECH_REGION}.api.cognitive.microsoft.com/customvoice",
+      "capabilities": ["custom_neural_voice", "voice_training", "voice_cloning"],
+      "costModel": "cloud_tracked"
     },
     "VisionAgent": {
       "agentName": "VisionAgent",
@@ -162,8 +185,8 @@
       "costModel": "cloud_tracked",
       "routes": {
         "heavy_reasoning": {
-          "provider": "anthropic",
-          "model": "claude-3-opus-20250219"
+          "provider": "azure",
+          "model": "claude-opus-4-8"
         },
         "fallback_reasoning": {
           "provider": "azure",
@@ -178,24 +201,24 @@
           "model": "claude-3-sonnet-20250514"
         },
         "cowork": {
-          "provider": "anthropic",
-          "model": "claude-3-opus-20250219"
+          "provider": "azure",
+          "model": "claude-opus-4-8"
         },
         "major_code": {
-          "provider": "anthropic",
-          "model": "claude-3-opus-20250219"
+          "provider": "azure",
+          "model": "claude-opus-4-8"
         },
         "creative": {
           "provider": "anthropic",
           "model": "claude-3-haiku-20250307"
         },
         "mid_reasoning": {
-          "provider": "anthropic",
-          "model": "claude-3-sonnet-20250514"
+          "provider": "azure",
+          "model": "Phi-4-reasoning"
         },
         "stt": {
           "provider": "azure",
-          "model": "whisper-1"
+          "model": "gpt-4o-transcribe-diarize"
         },
         "tts": {
           "provider": "azure",

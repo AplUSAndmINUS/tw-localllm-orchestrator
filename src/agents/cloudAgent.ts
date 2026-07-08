@@ -1,37 +1,41 @@
 import * as azure from '../cloud/azure';
 import * as anthropic from '../cloud/anthropic';
 import logger from '../tools/logger';
+import httpError from '../tools/httpError';
 import { AgentResponse, AgentMetadata, AgentExecuteParams, ChatMessage, Agent, CloudRoute, CloudRouteMap, AzureResponse, AnthropicResponse, TokenUsage } from '../types';
 
 const AGENT_NAME = 'CloudAgent';
 const RUNTIME = 'cloud';
 const INTENT = 'cloud';
 
+// Anthropic direct API is intentionally not a default route here — it's only
+// used when explicitly requested elsewhere, not auto-selected by the orchestrator.
 const CLOUD_ROUTES: CloudRouteMap = {
-  heavy_reasoning:    { provider: 'anthropic', model: 'claude-3-opus-20250219' },
+  heavy_reasoning:    { provider: 'azure',     model: 'claude-opus-4-8' },
   fallback_reasoning: { provider: 'azure',     model: 'gpt-4.1' },
   vision:             { provider: 'azure',     model: 'gpt-4o' },
   design:             { provider: 'anthropic', model: 'claude-3-sonnet-20250514' },
-  cowork:             { provider: 'anthropic', model: 'claude-3-opus-20250219' },
-  major_code:         { provider: 'anthropic', model: 'claude-3-opus-20250219' },
+  cowork:             { provider: 'azure',     model: 'claude-opus-4-8' },
+  major_code:         { provider: 'azure',     model: 'claude-opus-4-8' },
   creative:           { provider: 'anthropic', model: 'claude-3-haiku-20250307' },
-  mid_reasoning:      { provider: 'anthropic', model: 'claude-3-sonnet-20250514' },
-  stt:                { provider: 'azure',     model: 'whisper-1' },
+  mid_reasoning:      { provider: 'azure',     model: 'Phi-4-reasoning' },
+  stt:                { provider: 'azure',     model: 'gpt-4o-transcribe-diarize' },
   tts:                { provider: 'azure',     model: 'gpt-4o-mini-tts' },
 };
 
 function getRoute(cloudIntent: string): CloudRoute {
   const route = CLOUD_ROUTES[cloudIntent];
   if (!route) {
-    throw new Error(`Unknown cloud intent: ${cloudIntent}. Valid intents: ${Object.keys(CLOUD_ROUTES).join(', ')}`);
+    throw httpError(400, `Unknown cloud intent: ${cloudIntent}. Valid intents: ${Object.keys(CLOUD_ROUTES).join(', ')}`, 'bad_request');
   }
   return route;
 }
 
-function getClient(provider: string): typeof azure | typeof anthropic {
-  if (provider === 'anthropic') return anthropic;
-  if (provider === 'azure') return azure;
-  throw new Error(`Unknown cloud provider: ${provider}`);
+// Claude models deployed on Azure speak the native Anthropic Messages API
+// (different host/auth/response shape), not the OpenAI-compatible route every
+// other Azure model uses — so routing has to key off the model, not just the provider.
+function isClaudeModel(model: string): boolean {
+  return model.startsWith('claude');
 }
 
 async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> {
@@ -41,30 +45,32 @@ async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> 
   try {
     const route = getRoute(cloudIntent);
     const { provider, model } = route;
-    const client = getClient(provider);
+    const useAnthropicShape = provider === 'anthropic' || isClaudeModel(model);
 
     if (cloudIntent === 'stt') {
       if (!azure.isAvailable()) {
-        throw new Error('Azure not configured — API key missing');
+        throw httpError(503, 'Azure not configured — API key missing', 'not_configured');
       }
       const audioBuffer = params.audioBuffer || params.audio;
       if (!audioBuffer) {
-        throw new Error('No audio buffer provided for STT');
+        throw httpError(400, 'No audio buffer provided for STT', 'bad_request');
       }
       const buf = typeof audioBuffer === 'string' ? Buffer.from(audioBuffer, 'base64') : audioBuffer as Buffer;
       const result = await azure.transcribe(buf, model);
       const latencyMs = Date.now() - startMs;
 
       if (!result) {
-        throw new Error('Azure transcription returned null');
+        throw httpError(502, 'Azure transcription service failed', 'upstream_error');
       }
+
+      const sttText = (result as Record<string, unknown>).text;
 
       return {
         agent: AGENT_NAME,
         model,
         intent: INTENT,
         runtime: 'cloud_azure',
-        content: (result as Record<string, unknown>).text as string || JSON.stringify(result),
+        content: typeof sttText === 'string' ? sttText : JSON.stringify(result),
         tokens: { input: 0, output: 0 },
         latency_ms: latencyMs,
         cached: false,
@@ -73,7 +79,7 @@ async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> 
 
     if (cloudIntent === 'tts') {
       if (!azure.isAvailable()) {
-        throw new Error('Azure not configured — API key missing');
+        throw httpError(503, 'Azure not configured — API key missing', 'not_configured');
       }
       const text = params.text || prompt || '';
       const voice = params.voice || (options as Record<string, unknown>).voice as string || 'alloy';
@@ -81,7 +87,7 @@ async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> 
       const latencyMs = Date.now() - startMs;
 
       if (!audioBuffer) {
-        throw new Error('Azure TTS returned null');
+        throw httpError(502, 'Azure TTS service failed', 'upstream_error');
       }
 
       return {
@@ -100,17 +106,24 @@ async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> 
       ? messages
       : [{ role: 'user', content: prompt || '' }];
 
-    const response = await client.chat(model, chatMessages, options);
+    let response: AzureResponse | AnthropicResponse | null;
+    if (provider === 'anthropic') {
+      response = await anthropic.chat(model, chatMessages, options);
+    } else if (isClaudeModel(model)) {
+      response = await azure.chatClaude(model, chatMessages, options);
+    } else {
+      response = await azure.chat(model, chatMessages, options);
+    }
     const latencyMs = Date.now() - startMs;
 
     if (!response) {
-      throw new Error(`${provider} returned null response`);
+      throw httpError(502, `${provider} returned null response`, 'upstream_error');
     }
 
     let content: string;
     let tokens: TokenUsage;
 
-    if (provider === 'anthropic') {
+    if (useAnthropicShape) {
       const anthResponse = response as AnthropicResponse;
       content = anthResponse.content || '';
       tokens = {

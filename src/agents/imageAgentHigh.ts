@@ -1,10 +1,12 @@
 import * as ollama from '../models/ollama';
+import { getAgentProfile } from '../config/agentRegistry';
 import logger from '../tools/logger';
 import { AgentResponse, AgentMetadata, AgentExecuteParams, ChatMessage, Agent, OllamaResponse } from '../types';
 
 const AGENT_NAME = 'ImageAgentHigh';
-const MODEL = 'llama3.1:8b';
-const RUNTIME = 'ollama';
+const PROFILE = getAgentProfile(AGENT_NAME);
+const MODEL = PROFILE.model;
+const RUNTIME = PROFILE.runtime;
 const INTENT = 'image_high';
 
 async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> {
@@ -48,7 +50,7 @@ const metadata: AgentMetadata = {
   intent: INTENT,
   runtime: RUNTIME,
   model: MODEL,
-  capabilities: ['image_analysis', 'image_description', 'high_quality_vision'],
+  capabilities: PROFILE.capabilities,
 };
 
 export { execute, metadata };

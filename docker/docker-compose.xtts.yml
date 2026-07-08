@@ -2,14 +2,20 @@ version: "3.9"
 
 services:
   xtts:
-    image: ghcr.io/coqui-ai/xtts:latest
+    image: ghcr.io/coqui-ai/xtts-streaming-server:latest-cuda121
     container_name: aplus-xtts
     restart: unless-stopped
+    environment:
+      - COQUI_TOS_AGREED=1
     ports:
-      - "${APLUS_XTTS_PORT:-5002}:5002"
+      - "${APLUS_XTTS_PORT:-5002}:80"
     volumes:
-      - xtts_data:/data
-      - ./config/voices:/app/voices:ro
+      - xtts_data:/root/.local/share/tts
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
 
 volumes:
   xtts_data:

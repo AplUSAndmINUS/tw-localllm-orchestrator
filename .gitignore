@@ -22,6 +22,7 @@ config/secrets/
 config/private/
 config/voices/
 config/models/local/
+docker/config/voices/
 
 # Node.js
 node_modules/

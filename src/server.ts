@@ -17,6 +17,7 @@ import imageRoute from './routes/image';
 import codeRoute from './routes/code';
 import visionRoute from './routes/vision';
 import cloudRoute from './routes/cloud';
+import speechRoute from './routes/speech';
 import healthRoute from './routes/health';
 import modelsRoute from './routes/models';
 import agentsRoute from './routes/agents';
@@ -49,6 +50,11 @@ app.post('/v1/image', imageRoute);
 app.post('/v1/code', codeRoute);
 app.post('/v1/vision', visionRoute);
 app.post('/v1/cloud', cloudRoute);
+
+app.post('/v1/speech/tts', speechRoute.tts);
+app.post('/v1/speech/stt', speechRoute.stt);
+app.get('/v1/speech/cnv', speechRoute.listCnv);
+app.post('/v1/speech/cnv', speechRoute.synthesizeCnv);
 
 app.get('/v1/containers', containersRoute.list);
 app.post('/v1/containers/:service/start', containersRoute.start);

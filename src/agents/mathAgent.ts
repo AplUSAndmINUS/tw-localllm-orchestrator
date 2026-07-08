@@ -1,10 +1,12 @@
 import * as ollama from '../models/ollama';
+import { getAgentProfile } from '../config/agentRegistry';
 import logger from '../tools/logger';
 import { AgentResponse, AgentMetadata, AgentExecuteParams, ChatMessage, Agent, OllamaResponse } from '../types';
 
 const AGENT_NAME = 'MathAgent';
-const MODEL = 'deepseek-math:7b';
-const RUNTIME = 'ollama';
+const PROFILE = getAgentProfile(AGENT_NAME);
+const MODEL = PROFILE.model;
+const RUNTIME = PROFILE.runtime;
 const INTENT = 'math';
 
 async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> {
@@ -48,7 +50,7 @@ const metadata: AgentMetadata = {
   intent: INTENT,
   runtime: RUNTIME,
   model: MODEL,
-  capabilities: ['mathematical_computation', 'proofs', 'equations', 'calculus'],
+  capabilities: PROFILE.capabilities,
 };
 
 export { execute, metadata };

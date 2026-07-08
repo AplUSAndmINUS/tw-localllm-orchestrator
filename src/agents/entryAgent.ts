@@ -1,11 +1,12 @@
 import * as ollama from '../models/ollama';
-import config from '../config';
+import { getAgentProfile } from '../config/agentRegistry';
 import logger from '../tools/logger';
 import { AgentResponse, AgentMetadata, AgentExecuteParams, IntentClassification, ChatMessage, ClassifyingAgent, OllamaResponse } from '../types';
 
 const AGENT_NAME = 'EntryAgent';
-const MODEL: string = config.ollama.entryModel;
-const RUNTIME = 'ollama';
+const PROFILE = getAgentProfile(AGENT_NAME);
+const MODEL = PROFILE.model;
+const RUNTIME = PROFILE.runtime;
 const INTENT = 'classify';
 
 const VALID_INTENTS: string[] = [
@@ -121,7 +122,7 @@ const metadata: AgentMetadata = {
   intent: INTENT,
   runtime: RUNTIME,
   model: MODEL,
-  capabilities: ['intent_classification', 'quick_answers', 'routing'],
+  capabilities: PROFILE.capabilities,
 };
 
 export { classify, execute, metadata };

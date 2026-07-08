@@ -1,6 +1,7 @@
 import { ChromaClient, Collection, Metadata, QueryResponse } from 'chromadb';
 import { v4 as uuidv4 } from 'uuid';
 import config from '../config';
+import * as onnx from '../models/onnx';
 import logger from '../tools/logger';
 import { ServiceHealth } from '../types';
 
@@ -38,8 +39,19 @@ async function ingest({ collection, documents, ids, metadatas }: IngestParams): 
   try {
     const col = typeof collection === 'string' ? await getOrCreateCollection(collection) : collection;
     if (!col) return null;
+
+    const embeddings = await onnx.embed(documents);
+    if (!embeddings) {
+      logger.error('ChromaDB ingest failed: embedding service returned null');
+      return null;
+    }
+
     const resolvedIds = ids || documents.map(() => uuidv4());
-    const params: { documents: string[]; ids: string[]; metadatas?: Metadata[] } = { documents, ids: resolvedIds };
+    const params: { documents: string[]; ids: string[]; embeddings: number[][]; metadatas?: Metadata[] } = {
+      documents,
+      ids: resolvedIds,
+      embeddings,
+    };
     if (metadatas) params.metadatas = metadatas;
     await col.add(params);
     return { added: resolvedIds.length, ids: resolvedIds };
@@ -59,7 +71,14 @@ async function query({ collection, queryTexts, nResults = 5 }: QueryParams): Pro
   try {
     const col = typeof collection === 'string' ? await getOrCreateCollection(collection) : collection;
     if (!col) return null;
-    return await col.query({ queryTexts, nResults });
+
+    const queryEmbeddings = await onnx.embed(queryTexts);
+    if (!queryEmbeddings) {
+      logger.error('ChromaDB query failed: embedding service returned null');
+      return null;
+    }
+
+    return await col.query({ queryEmbeddings, nResults });
   } catch (err: unknown) {
     logger.error('ChromaDB query failed', { error: (err as Error).message });
     return null;

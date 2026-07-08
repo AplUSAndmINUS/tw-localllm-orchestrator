@@ -1,3 +1,10 @@
+export interface HttpError extends Error {
+  status?: number;
+  statusCode?: number;
+  expose?: boolean;
+  code?: string;
+}
+
 export interface AgentResponse {
   agent: string;
   model: string;
@@ -197,10 +204,16 @@ export interface AppConfig {
     healthCheckInterval: number;
     allowFallback: boolean;
   };
+  xtts: {
+    voicesPath: string;
+  };
   azure: {
     endpoint: string;
     apiKey: string;
-    apiVersion: string;
+  };
+  azureSpeech: {
+    apiKey: string;
+    region: string;
   };
   anthropic: {
     apiKey: string;

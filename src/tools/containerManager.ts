@@ -12,6 +12,7 @@ const SERVICE_CONTAINER_MAP: Record<ContainerService, string> = {
 };
 
 const lastActivity = new Map<ContainerService, number>();
+const activeRequests = new Map<ContainerService, number>();
 let idleCheckInterval: ReturnType<typeof setInterval> | null = null;
 
 function composePath(): string {
@@ -41,7 +42,7 @@ function dockerComposeAsync(args: string): Promise<string> {
 function getContainerStatus(service: ContainerService): ContainerStatus {
   const containerName = SERVICE_CONTAINER_MAP[service];
   try {
-    const format = '{{.State.Status}}|{{.State.Health.Status}}|{{.State.StartedAt}}';
+    const format = '{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{end}}|{{.State.StartedAt}}';
     const raw = execSync(
       `docker inspect --format="${format}" ${containerName}`,
       { encoding: 'utf-8', timeout: 10000 }
@@ -49,7 +50,9 @@ function getContainerStatus(service: ContainerService): ContainerStatus {
 
     const [status, health, startedAt] = raw.split('|');
     const running = status === 'running';
-    const healthy = health === 'healthy' || (running && health === '');
+    // Containers started without a HEALTHCHECK (e.g. via a standalone per-service
+    // compose file) report no Health block at all — treat that as healthy if running.
+    const healthy = health === 'healthy' || (running && !health);
 
     let uptime: string | undefined;
     if (running && startedAt) {
@@ -152,7 +155,9 @@ function checkGpuStatus(): GpuStatus {
     ).trim();
 
     const [utilization, memUsed, memTotal] = raw.split(',').map(s => parseFloat(s.trim()));
-    const saturated = utilization >= config.containers.gpuSaturationThreshold;
+    const memoryPercent = memTotal > 0 ? (memUsed / memTotal) * 100 : 0;
+    const saturated = utilization >= config.containers.gpuSaturationThreshold
+      || memoryPercent >= config.containers.gpuSaturationThreshold;
 
     return {
       available: true,
@@ -170,8 +175,49 @@ function isGpuSaturated(): boolean {
   return checkGpuStatus().saturated;
 }
 
+// xtts is the only managed container that competes with Ollama for GPU
+// memory/compute (onnx-runtime and chromadb run CPU-only images), so it's
+// the one lever we have for relieving GPU pressure before falling back to cloud.
+async function freeGpuHeadroom(excludeService?: ContainerService): Promise<boolean> {
+  if (!isGpuSaturated()) return true;
+
+  if (excludeService !== 'xtts' && isIdleService('xtts')) {
+    const status = getContainerStatus('xtts');
+    if (status.running) {
+      logger.info('Stopping idle xtts container to relieve GPU pressure before cloud fallback');
+      try {
+        await stopService('xtts');
+      } catch (err) {
+        logger.warn('Failed to stop xtts while freeing GPU headroom', { error: (err as Error).message });
+      }
+    }
+  }
+
+  await sleep(2000);
+  return !isGpuSaturated();
+}
+
 function recordActivity(service: ContainerService): void {
   lastActivity.set(service, Date.now());
+}
+
+function beginRequest(service: ContainerService): void {
+  activeRequests.set(service, (activeRequests.get(service) || 0) + 1);
+  recordActivity(service);
+}
+
+function endRequest(service: ContainerService): void {
+  const count = (activeRequests.get(service) || 1) - 1;
+  if (count <= 0) {
+    activeRequests.delete(service);
+  } else {
+    activeRequests.set(service, count);
+  }
+  recordActivity(service);
+}
+
+function isIdleService(service: ContainerService): boolean {
+  return !activeRequests.has(service);
 }
 
 async function checkIdleServices(): Promise<void> {
@@ -181,6 +227,8 @@ async function checkIdleServices(): Promise<void> {
   const services = Object.keys(SERVICE_CONTAINER_MAP) as ContainerService[];
 
   for (const service of services) {
+    if (!isIdleService(service)) continue;
+
     const last = lastActivity.get(service);
     if (!last) continue;
 
@@ -233,7 +281,10 @@ export {
   ensureRunning,
   checkGpuStatus,
   isGpuSaturated,
+  freeGpuHeadroom,
   recordActivity,
+  beginRequest,
+  endRequest,
   checkIdleServices,
   startIdlePolling,
   stopIdlePolling,

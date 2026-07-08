@@ -2,13 +2,15 @@ import * as lmstudio from '../models/lmstudio';
 import * as ollama from '../models/ollama';
 import * as containerManager from '../tools/containerManager';
 import config from '../config';
+import { getAgentProfile } from '../config/agentRegistry';
 import logger from '../tools/logger';
 import { AgentResponse, AgentMetadata, AgentExecuteParams, ChatMessage, Agent, OllamaResponse, LMStudioResponse } from '../types';
 
 const AGENT_NAME = 'ReasoningAgent';
-const MODEL = 'phi-4-reasoning-plus-Q4_K_M.gguf';
+const PROFILE = getAgentProfile(AGENT_NAME);
+const MODEL = PROFILE.model;
 const FALLBACK_MODEL: string = config.ollama.entryModel;
-const RUNTIME = 'lmstudio';
+const RUNTIME = PROFILE.runtime;
 const INTENT = 'reasoning_heavy';
 
 async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> {
@@ -76,7 +78,7 @@ const metadata: AgentMetadata = {
   intent: INTENT,
   runtime: RUNTIME,
   model: MODEL,
-  capabilities: ['complex_reasoning', 'multi_step_analysis', 'planning'],
+  capabilities: PROFILE.capabilities,
 };
 
 export { execute, metadata };
