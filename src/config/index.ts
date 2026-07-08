@@ -61,6 +61,11 @@ const config: AppConfig = {
     apiKey: process.env.ANTHROPIC_API_KEY || '',
   },
 
+  wynet: {
+    gatewayUrl: process.env.WYNET_AI_GATEWAY_URL || 'https://fluxline.wynet.ai/api/ai/gateway',
+    apiKey: process.env.WYNET_AI_GATEWAY_TOKEN || '',
+  },
+
   rateLimit: {
     maxRequests: parseInt(process.env.APLUS_RATE_LIMIT_REQUESTS || '60', 10),
     windowMs: parseInt(process.env.APLUS_RATE_LIMIT_WINDOW_MS || '60000', 10),

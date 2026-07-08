@@ -100,7 +100,7 @@ export interface HealthReport {
 }
 
 export interface CloudRoute {
-  provider: 'anthropic' | 'azure';
+  provider: 'wynet' | 'anthropic' | 'azure';
   model: string;
 }
 
@@ -216,6 +216,10 @@ export interface AppConfig {
     region: string;
   };
   anthropic: {
+    apiKey: string;
+  };
+  wynet: {
+    gatewayUrl: string;
     apiKey: string;
   };
   rateLimit: {
