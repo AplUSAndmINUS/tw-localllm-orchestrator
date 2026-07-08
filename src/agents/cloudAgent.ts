@@ -1,6 +1,7 @@
 import * as azure from '../cloud/azure';
 import * as anthropic from '../cloud/anthropic';
 import logger from '../tools/logger';
+import httpError from '../tools/httpError';
 import { AgentResponse, AgentMetadata, AgentExecuteParams, ChatMessage, Agent, CloudRoute, CloudRouteMap, AzureResponse, AnthropicResponse, TokenUsage } from '../types';
 
 const AGENT_NAME = 'CloudAgent';
@@ -25,7 +26,7 @@ const CLOUD_ROUTES: CloudRouteMap = {
 function getRoute(cloudIntent: string): CloudRoute {
   const route = CLOUD_ROUTES[cloudIntent];
   if (!route) {
-    throw new Error(`Unknown cloud intent: ${cloudIntent}. Valid intents: ${Object.keys(CLOUD_ROUTES).join(', ')}`);
+    throw httpError(400, `Unknown cloud intent: ${cloudIntent}. Valid intents: ${Object.keys(CLOUD_ROUTES).join(', ')}`, 'bad_request');
   }
   return route;
 }
@@ -48,18 +49,18 @@ async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> 
 
     if (cloudIntent === 'stt') {
       if (!azure.isAvailable()) {
-        throw new Error('Azure not configured — API key missing');
+        throw httpError(503, 'Azure not configured — API key missing', 'not_configured');
       }
       const audioBuffer = params.audioBuffer || params.audio;
       if (!audioBuffer) {
-        throw new Error('No audio buffer provided for STT');
+        throw httpError(400, 'No audio buffer provided for STT', 'bad_request');
       }
       const buf = typeof audioBuffer === 'string' ? Buffer.from(audioBuffer, 'base64') : audioBuffer as Buffer;
       const result = await azure.transcribe(buf, model);
       const latencyMs = Date.now() - startMs;
 
       if (!result) {
-        throw new Error('Azure transcription returned null');
+        throw httpError(502, 'Azure transcription service failed', 'upstream_error');
       }
 
       const sttText = (result as Record<string, unknown>).text;
@@ -78,7 +79,7 @@ async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> 
 
     if (cloudIntent === 'tts') {
       if (!azure.isAvailable()) {
-        throw new Error('Azure not configured — API key missing');
+        throw httpError(503, 'Azure not configured — API key missing', 'not_configured');
       }
       const text = params.text || prompt || '';
       const voice = params.voice || (options as Record<string, unknown>).voice as string || 'alloy';
@@ -86,7 +87,7 @@ async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> 
       const latencyMs = Date.now() - startMs;
 
       if (!audioBuffer) {
-        throw new Error('Azure TTS returned null');
+        throw httpError(502, 'Azure TTS service failed', 'upstream_error');
       }
 
       return {
@@ -116,7 +117,7 @@ async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> 
     const latencyMs = Date.now() - startMs;
 
     if (!response) {
-      throw new Error(`${provider} returned null response`);
+      throw httpError(502, `${provider} returned null response`, 'upstream_error');
     }
 
     let content: string;

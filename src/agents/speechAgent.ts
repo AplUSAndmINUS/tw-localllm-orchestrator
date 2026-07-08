@@ -1,6 +1,7 @@
 import * as azure from '../cloud/azure';
 import { getAgentProfile } from '../config/agentRegistry';
 import logger from '../tools/logger';
+import httpError from '../tools/httpError';
 import { AgentResponse, AgentMetadata, AgentExecuteParams, Agent } from '../types';
 
 const AGENT_NAME = 'SpeechAgent';
@@ -14,12 +15,12 @@ async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> 
 
   try {
     if (!azure.isAvailable()) {
-      throw new Error('Azure transcription is not configured — AZURE_OPENAI_API_KEY missing');
+      throw httpError(503, 'Azure transcription is not configured — AZURE_OPENAI_API_KEY missing', 'not_configured');
     }
 
     const audioInput = params.audioBuffer || params.audio;
     if (!audioInput) {
-      throw new Error('No audio provided for speech-to-text');
+      throw httpError(400, 'No audio provided for speech-to-text', 'bad_request');
     }
     const audioBuffer = typeof audioInput === 'string' ? Buffer.from(audioInput, 'base64') : audioInput;
 
@@ -27,7 +28,7 @@ async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> 
     const latencyMs = Date.now() - startMs;
 
     if (!result) {
-      throw new Error('Azure transcription returned null');
+      throw httpError(502, 'Azure transcription service failed', 'upstream_error');
     }
 
     const text = (result as Record<string, unknown>).text;

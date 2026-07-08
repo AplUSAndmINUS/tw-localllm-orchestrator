@@ -1,12 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import logger from '../tools/logger';
-
-interface HttpError extends Error {
-  status?: number;
-  statusCode?: number;
-  expose?: boolean;
-  code?: string;
-}
+import { HttpError } from '../types';
 
 function errorHandler(err: HttpError, req: Request, res: Response, _next: NextFunction): void {
   const status = err.status || err.statusCode || 500;

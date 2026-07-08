@@ -1,6 +1,7 @@
 import * as azureSpeech from '../cloud/azureSpeech';
 import { getAgentProfile } from '../config/agentRegistry';
 import logger from '../tools/logger';
+import httpError from '../tools/httpError';
 import { AgentResponse, AgentMetadata, AgentExecuteParams, Agent } from '../types';
 
 const AGENT_NAME = 'AzureSpeechSTT';
@@ -14,12 +15,12 @@ async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> 
 
   try {
     if (!azureSpeech.isAvailable()) {
-      throw new Error('Azure Speech is not configured — AZURE_SPEECH_API_KEY/AZURE_SPEECH_REGION missing');
+      throw httpError(503, 'Azure Speech is not configured — AZURE_SPEECH_API_KEY/AZURE_SPEECH_REGION missing', 'not_configured');
     }
 
     const audioInput = params.audioBuffer || params.audio;
     if (!audioInput) {
-      throw new Error('No audio provided for speech-to-text');
+      throw httpError(400, 'No audio provided for speech-to-text', 'bad_request');
     }
     const audioBuffer = typeof audioInput === 'string' ? Buffer.from(audioInput, 'base64') : audioInput;
     const language = (params.options as Record<string, unknown>)?.language as string || 'en-US';
@@ -28,7 +29,7 @@ async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> 
     const latencyMs = Date.now() - startMs;
 
     if (text === null) {
-      throw new Error('Azure Speech transcribe returned null');
+      throw httpError(502, 'Azure Speech transcription service failed', 'upstream_error');
     }
 
     return {

@@ -1,3 +1,10 @@
+export interface HttpError extends Error {
+  status?: number;
+  statusCode?: number;
+  expose?: boolean;
+  code?: string;
+}
+
 export interface AgentResponse {
   agent: string;
   model: string;
