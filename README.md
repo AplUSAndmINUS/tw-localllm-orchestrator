@@ -188,6 +188,8 @@ Older, now-unused copies of these config files (and a `routingTable.json` that w
 | `GET` | `/v1/models` | Live Ollama models + LM Studio's loaded model + the static model catalog |
 | `GET` | `/v1/agents` | Configured agent profiles from `agentProfiles.json` |
 | `POST` | `/v1/chat` | Classifies intent (or honors `agent`/`intent` override) and routes accordingly |
+| `POST` | `/v1/responses` | OpenAI Responses-compatible endpoint for modern agent runtimes (YourClaw/OpenClaw) |
+| `POST` | `/v1/messages` | Anthropic Messages-compatible endpoint for tool use and multipart chat |
 | `POST` | `/v1/rag` | `{action: 'query'}` (default) or `{action: 'ingest'}` against ChromaDB |
 | `POST` | `/v1/stt` | Speech-to-text via Azure (`{audio: <base64>}`) |
 | `POST` | `/v1/tts` | Text-to-speech via XTTS (`{text, voiceRef?, language?}`) |
@@ -204,6 +206,8 @@ Older, now-unused copies of these config files (and a `routingTable.json` that w
 | `GET` | `/v1/gpu` | Current GPU utilization/VRAM/saturation status |
 
 All `/v1/*` routes pass through rate limiting (`express-rate-limit`, configurable via `APLUS_RATE_LIMIT_REQUESTS`/`APLUS_RATE_LIMIT_WINDOW_MS`) and an optional bearer-token auth middleware — auth is a no-op if `ORCHESTRATOR_API_KEY` isn't set.
+
+The protocol-compatibility routes (`/v1/responses` and `/v1/messages`) reuse the same local/cloud routing layer as the rest of the orchestrator, so any future gateway abstraction (including a WYNet-style cloud gateway) automatically applies to cloud-bound calls from those endpoints too.
 
 ---
 
@@ -292,6 +296,53 @@ curl -s -X POST http://localhost:3200/v1/chat \
   -H "Content-Type: application/json" \
   -d '{"agent": "coding", "messages": [{"role": "user", "content": "..."}]}'
 ```
+
+### OpenAI Responses API compatibility
+
+```bash
+curl -s -X POST http://localhost:3200/v1/responses \
+  -H "Content-Type: application/json" \
+  -d '{"model":"phi4-mini","input":"Summarize this repository in one sentence.","max_output_tokens":128}'
+```
+
+Example response:
+
+```json
+{
+  "id": "resp_...",
+  "object": "response",
+  "model": "phi4-mini:latest",
+  "output": [
+    {
+      "type": "message",
+      "role": "assistant",
+      "content": "..."
+    }
+  ]
+}
+```
+
+### Anthropic Messages API compatibility
+
+```bash
+curl -s -X POST http://localhost:3200/v1/messages \
+  -H "Content-Type: application/json" \
+  -d '{"model":"claude-3-sonnet-20250514","system":"Be concise.","messages":[{"role":"user","content":"List the available endpoints."}],"max_tokens":128}'
+```
+
+Example response:
+
+```json
+{
+  "id": "msg_...",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-3-sonnet-20250514",
+  "content": "..."
+}
+```
+
+These two endpoints are intended for YourClaw/OpenClaw and other modern agent runtimes that expect OpenAI Responses or Anthropic Messages wire formats without changing the orchestrator's underlying routing behavior.
 
 ### Text-to-speech with your cloned voice
 

@@ -21,6 +21,7 @@ import speechRoute from './routes/speech';
 import healthRoute from './routes/health';
 import modelsRoute from './routes/models';
 import agentsRoute from './routes/agents';
+import protocolRoute from './routes/protocol';
 
 import { startHealthPolling } from './tools/health';
 import { startIdlePolling, stopIdlePolling } from './tools/containerManager';
@@ -43,6 +44,8 @@ app.get('/v1/models', modelsRoute);
 app.get('/v1/agents', agentsRoute);
 
 app.post('/v1/chat', chatRoute);
+app.post('/v1/responses', protocolRoute.responses);
+app.post('/v1/messages', protocolRoute.messages);
 app.post('/v1/rag', ragRoute);
 app.post('/v1/stt', sttRoute);
 app.post('/v1/tts', ttsRoute);

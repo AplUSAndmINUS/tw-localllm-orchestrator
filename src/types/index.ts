@@ -72,6 +72,13 @@ export interface ContentPart {
   image_url?: { url: string };
 }
 
+export interface AssistantToolCall {
+  id: string;
+  name: string;
+  arguments: string;
+  input?: Record<string, unknown>;
+}
+
 export interface RagMetadata {
   collection: string;
   contextChunks: number;
@@ -109,7 +116,17 @@ export interface CloudRouteMap {
 }
 
 export interface OllamaResponse {
-  message?: { content: string };
+  message?: {
+    content?: string;
+    tool_calls?: Array<{
+      id?: string;
+      type?: string;
+      function?: {
+        name?: string;
+        arguments?: string;
+      };
+    }>;
+  };
   prompt_eval_count?: number;
   eval_count?: number;
   model?: string;
@@ -124,7 +141,17 @@ export interface OllamaModel {
 
 export interface LMStudioResponse {
   choices?: Array<{
-    message?: { content: string };
+    message?: {
+      content?: string;
+      tool_calls?: Array<{
+        id?: string;
+        type?: string;
+        function?: {
+          name?: string;
+          arguments?: string;
+        };
+      }>;
+    };
   }>;
   usage?: {
     prompt_tokens?: number;
@@ -135,17 +162,29 @@ export interface LMStudioResponse {
 
 export interface AzureResponse {
   choices?: Array<{
-    message?: { content: string };
+    message?: {
+      content?: string;
+      tool_calls?: Array<{
+        id?: string;
+        type?: string;
+        function?: {
+          name?: string;
+          arguments?: string;
+        };
+      }>;
+    };
   }>;
   usage?: {
     prompt_tokens?: number;
     completion_tokens?: number;
   };
+  model?: string;
 }
 
 export interface AnthropicResponse {
   content: string;
   model: string;
+  tool_calls?: AssistantToolCall[];
   usage?: {
     input_tokens?: number;
     output_tokens?: number;
@@ -217,6 +256,10 @@ export interface AppConfig {
   };
   anthropic: {
     apiKey: string;
+  };
+  protocol: {
+    enableOpenAIResponses: boolean;
+    enableAnthropicMessages: boolean;
   };
   rateLimit: {
     maxRequests: number;

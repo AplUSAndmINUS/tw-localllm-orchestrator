@@ -61,6 +61,11 @@ const config: AppConfig = {
     apiKey: process.env.ANTHROPIC_API_KEY || '',
   },
 
+  protocol: {
+    enableOpenAIResponses: process.env.ENABLE_OPENAI_RESPONSES !== 'false',
+    enableAnthropicMessages: process.env.ENABLE_ANTHROPIC_MESSAGES !== 'false',
+  },
+
   rateLimit: {
     maxRequests: parseInt(process.env.APLUS_RATE_LIMIT_REQUESTS || '60', 10),
     windowMs: parseInt(process.env.APLUS_RATE_LIMIT_WINDOW_MS || '60000', 10),

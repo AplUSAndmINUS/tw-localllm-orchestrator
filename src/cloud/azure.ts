@@ -48,6 +48,8 @@ async function chatClaude(model: string, messages: ChatMessage[], options: Recor
       max_tokens: (options.max_tokens as number) || 1024,
     };
     if (system) body.system = system;
+    if (typeof options.temperature === 'number') body.temperature = options.temperature;
+    if (Array.isArray(options.tools)) body.tools = options.tools;
 
     const { data } = await axios.post(`${anthropicEndpoint}/anthropic/v1/messages`, body, {
       headers: {
@@ -58,8 +60,19 @@ async function chatClaude(model: string, messages: ChatMessage[], options: Recor
     });
 
     return {
-      content: (data.content || []).map((block: { text: string }) => block.text).join(''),
+      content: (data.content || [])
+        .filter((block: { type?: string }) => block.type === 'text')
+        .map((block: { text: string }) => block.text)
+        .join(''),
       model: data.model,
+      tool_calls: (data.content || [])
+        .filter((block: { type?: string }) => block.type === 'tool_use')
+        .map((block: { id?: string; name?: string; input?: Record<string, unknown> }) => ({
+          id: block.id || `${model}_tool`,
+          name: block.name || 'tool',
+          arguments: JSON.stringify(block.input || {}),
+          input: (block.input || {}) as Record<string, unknown>,
+        })),
       usage: {
         input_tokens: data.usage?.input_tokens,
         output_tokens: data.usage?.output_tokens,
