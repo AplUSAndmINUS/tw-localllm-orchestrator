@@ -51,6 +51,13 @@ const config: AppConfig = {
     apiVersion: process.env.AZURE_OPENAI_API_VERSION || '2024-08-01-preview',
   },
 
+  // Separate Cognitive Services Speech resource (region-based REST API, not the
+  // Foundry /models endpoint) — used for advanced TTS/STT beyond XTTS/gpt-4o-transcribe.
+  azureSpeech: {
+    apiKey: process.env.AZURE_SPEECH_API_KEY || '',
+    region: process.env.AZURE_SPEECH_REGION || '',
+  },
+
   anthropic: {
     apiKey: process.env.ANTHROPIC_API_KEY || '',
   },

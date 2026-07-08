@@ -205,6 +205,10 @@ export interface AppConfig {
     apiKey: string;
     apiVersion: string;
   };
+  azureSpeech: {
+    apiKey: string;
+    region: string;
+  };
   anthropic: {
     apiKey: string;
   };
