@@ -48,7 +48,6 @@ const config: AppConfig = {
   azure: {
     endpoint: process.env.AZURE_OPENAI_ENDPOINT || '',
     apiKey: process.env.AZURE_OPENAI_API_KEY || '',
-    apiVersion: process.env.AZURE_OPENAI_API_VERSION || '2024-08-01-preview',
   },
 
   // Separate Cognitive Services Speech resource (region-based REST API, not the

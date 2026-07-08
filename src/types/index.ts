@@ -203,7 +203,6 @@ export interface AppConfig {
   azure: {
     endpoint: string;
     apiKey: string;
-    apiVersion: string;
   };
   azureSpeech: {
     apiKey: string;
