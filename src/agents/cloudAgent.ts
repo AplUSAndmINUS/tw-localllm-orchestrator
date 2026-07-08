@@ -53,7 +53,7 @@ async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> 
 
       if (!result) {
         logger.warn('WYNet gateway STT failed — no local fallback available for audio transcription', { model });
-        throw httpError(502, 'WYNet gateway STT service failed', 'upstream_error');
+        throw httpError(502, `WYNet gateway STT failed for model '${model}' — check gateway configuration and connectivity`, 'upstream_error');
       }
 
       const sttText = (result as Record<string, unknown>).text;
@@ -78,7 +78,7 @@ async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> 
 
       if (!audioBuffer) {
         logger.warn('WYNet gateway TTS failed — no local fallback available for audio synthesis', { model });
-        throw httpError(502, 'WYNet gateway TTS service failed', 'upstream_error');
+        throw httpError(502, `WYNet gateway TTS failed for model '${model}' — check gateway configuration and connectivity`, 'upstream_error');
       }
 
       return {

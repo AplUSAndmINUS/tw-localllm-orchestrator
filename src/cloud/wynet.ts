@@ -76,7 +76,7 @@ async function tts(
         responseType: 'arraybuffer',
       }
     );
-    return data;
+    return Buffer.from(data);
   } catch (err: unknown) {
     logger.error('WYNet gateway TTS failed', { model, error: (err as Error).message });
     return null;
