@@ -231,7 +231,7 @@ function createResponsesRoute(dependencies: ProtocolRouteDependencies = {}): Pro
 
       const result = await routeRequest(model, normalizedMessages, options);
       if (!result) {
-        throw new Error('Responses routing failed');
+        throw new Error(`Responses routing failed for model ${model}: no available provider`);
       }
 
       res.json(formatResponsesPayload(nextId('resp'), result));
@@ -285,7 +285,7 @@ function createMessagesRoute(dependencies: ProtocolRouteDependencies = {}): Prot
 
       const result = await routeRequest(model, protocolMessages, options);
       if (!result) {
-        throw new Error('Messages routing failed');
+        throw new Error(`Messages routing failed for model ${model}: no available provider`);
       }
 
       res.json(formatAnthropicPayload(nextId('msg'), result));

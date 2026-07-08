@@ -67,8 +67,8 @@ async function chatClaude(model: string, messages: ChatMessage[], options: Recor
       model: data.model,
       tool_calls: (data.content || [])
         .filter((block: { type?: string }) => block.type === 'tool_use')
-        .map((block: { id?: string; name?: string; input?: Record<string, unknown> }) => ({
-          id: block.id || `${model}_tool`,
+        .map((block: { id?: string; name?: string; input?: Record<string, unknown> }, index: number) => ({
+          id: block.id || `${model}_tool_${index}`,
           name: block.name || 'tool',
           arguments: JSON.stringify(block.input || {}),
           input: (block.input || {}) as Record<string, unknown>,
