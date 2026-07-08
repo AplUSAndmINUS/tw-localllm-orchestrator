@@ -12,7 +12,9 @@ services:
     environment:
       - OLLAMA_HOST=0.0.0.0
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      # The official image no longer ships curl; the ollama CLI itself talks
+      # to the local server and doubles as a liveness check.
+      test: ["CMD", "ollama", "list"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -79,7 +81,10 @@ services:
       - IS_PERSISTENT=TRUE
       - ANONYMIZED_TELEMETRY=FALSE
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      # This image ships neither curl nor wget; bash's /dev/tcp is the only
+      # thing available to speak HTTP (default /bin/sh is dash and lacks it).
+      # The v1 API is deprecated server-side too, hence /api/v2.
+      test: ["CMD-SHELL", "bash -c \"exec 3<>/dev/tcp/localhost/8000; printf 'GET /api/v2/heartbeat HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3; head -1 <&3 | grep -q '200 OK'\""]
       interval: 10s
       timeout: 5s
       retries: 3
