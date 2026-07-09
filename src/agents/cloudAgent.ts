@@ -1,26 +1,25 @@
-import * as azure from '../cloud/azure';
-import * as anthropic from '../cloud/anthropic';
+import * as wynet from '../cloud/wynet';
+import * as ollama from '../models/ollama';
 import logger from '../tools/logger';
 import httpError from '../tools/httpError';
-import { AgentResponse, AgentMetadata, AgentExecuteParams, ChatMessage, Agent, CloudRoute, CloudRouteMap, AzureResponse, AnthropicResponse, TokenUsage } from '../types';
+import config from '../config';
+import { AgentResponse, AgentMetadata, AgentExecuteParams, ChatMessage, Agent, CloudRoute, CloudRouteMap, AzureResponse, TokenUsage } from '../types';
 
 const AGENT_NAME = 'CloudAgent';
 const RUNTIME = 'cloud';
 const INTENT = 'cloud';
 
-// Anthropic direct API is intentionally not a default route here — it's only
-// used when explicitly requested elsewhere, not auto-selected by the orchestrator.
 const CLOUD_ROUTES: CloudRouteMap = {
-  heavy_reasoning:    { provider: 'azure',     model: 'claude-opus-4-8' },
-  fallback_reasoning: { provider: 'azure',     model: 'gpt-4.1' },
-  vision:             { provider: 'azure',     model: 'gpt-4o' },
-  design:             { provider: 'anthropic', model: 'claude-3-sonnet-20250514' },
-  cowork:             { provider: 'azure',     model: 'claude-opus-4-8' },
-  major_code:         { provider: 'azure',     model: 'claude-opus-4-8' },
-  creative:           { provider: 'anthropic', model: 'claude-3-haiku-20250307' },
-  mid_reasoning:      { provider: 'azure',     model: 'Phi-4-reasoning' },
-  stt:                { provider: 'azure',     model: 'gpt-4o-transcribe-diarize' },
-  tts:                { provider: 'azure',     model: 'gpt-4o-mini-tts' },
+  heavy_reasoning:    { provider: 'wynet', model: 'claude-opus-4-8' },
+  fallback_reasoning: { provider: 'wynet', model: 'gpt-4.1' },
+  vision:             { provider: 'wynet', model: 'gpt-4o' },
+  design:             { provider: 'wynet', model: 'claude-3-sonnet-20250514' },
+  cowork:             { provider: 'wynet', model: 'claude-opus-4-8' },
+  major_code:         { provider: 'wynet', model: 'claude-opus-4-8' },
+  creative:           { provider: 'wynet', model: 'claude-3-haiku-20250307' },
+  mid_reasoning:      { provider: 'wynet', model: 'Phi-4-reasoning' },
+  stt:                { provider: 'wynet', model: 'gpt-4o-transcribe-diarize' },
+  tts:                { provider: 'wynet', model: 'gpt-4o-mini-tts' },
 };
 
 function getRoute(cloudIntent: string): CloudRoute {
@@ -31,36 +30,30 @@ function getRoute(cloudIntent: string): CloudRoute {
   return route;
 }
 
-// Claude models deployed on Azure speak the native Anthropic Messages API
-// (different host/auth/response shape), not the OpenAI-compatible route every
-// other Azure model uses — so routing has to key off the model, not just the provider.
-function isClaudeModel(model: string): boolean {
-  return model.startsWith('claude');
-}
-
 async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> {
   const { messages = [], prompt, cloudIntent = 'mid_reasoning', options = {} } = params;
   const startMs = Date.now();
 
   try {
+    if (!wynet.isAvailable()) {
+      throw httpError(503, 'WYNet gateway is not configured — WYNET_AI_GATEWAY_TOKEN missing', 'not_configured');
+    }
+
     const route = getRoute(cloudIntent);
-    const { provider, model } = route;
-    const useAnthropicShape = provider === 'anthropic' || isClaudeModel(model);
+    const { model } = route;
 
     if (cloudIntent === 'stt') {
-      if (!azure.isAvailable()) {
-        throw httpError(503, 'Azure not configured — API key missing', 'not_configured');
-      }
       const audioBuffer = params.audioBuffer || params.audio;
       if (!audioBuffer) {
         throw httpError(400, 'No audio buffer provided for STT', 'bad_request');
       }
       const buf = typeof audioBuffer === 'string' ? Buffer.from(audioBuffer, 'base64') : audioBuffer as Buffer;
-      const result = await azure.transcribe(buf, model);
+      const result = await wynet.transcribe(buf, model);
       const latencyMs = Date.now() - startMs;
 
       if (!result) {
-        throw httpError(502, 'Azure transcription service failed', 'upstream_error');
+        logger.warn('WYNet gateway STT failed — no local fallback available for audio transcription', { model });
+        throw httpError(502, `WYNet gateway STT failed for model '${model}' — check gateway configuration and connectivity`, 'upstream_error');
       }
 
       const sttText = (result as Record<string, unknown>).text;
@@ -69,7 +62,7 @@ async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> 
         agent: AGENT_NAME,
         model,
         intent: INTENT,
-        runtime: 'cloud_azure',
+        runtime: 'cloud_wynet',
         content: typeof sttText === 'string' ? sttText : JSON.stringify(result),
         tokens: { input: 0, output: 0 },
         latency_ms: latencyMs,
@@ -78,23 +71,21 @@ async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> 
     }
 
     if (cloudIntent === 'tts') {
-      if (!azure.isAvailable()) {
-        throw httpError(503, 'Azure not configured — API key missing', 'not_configured');
-      }
       const text = params.text || prompt || '';
       const voice = params.voice || (options as Record<string, unknown>).voice as string || 'alloy';
-      const audioBuffer = await azure.tts(text, model, voice);
+      const audioBuffer = await wynet.tts(text, model, voice);
       const latencyMs = Date.now() - startMs;
 
       if (!audioBuffer) {
-        throw httpError(502, 'Azure TTS service failed', 'upstream_error');
+        logger.warn('WYNet gateway TTS failed — no local fallback available for audio synthesis', { model });
+        throw httpError(502, `WYNet gateway TTS failed for model '${model}' — check gateway configuration and connectivity`, 'upstream_error');
       }
 
       return {
         agent: AGENT_NAME,
         model,
         intent: INTENT,
-        runtime: 'cloud_azure',
+        runtime: 'cloud_wynet',
         content: Buffer.from(audioBuffer).toString('base64'),
         tokens: { input: text.length, output: (audioBuffer as Buffer).byteLength },
         latency_ms: latencyMs,
@@ -106,44 +97,46 @@ async function execute(params: AgentExecuteParams = {}): Promise<AgentResponse> 
       ? messages
       : [{ role: 'user', content: prompt || '' }];
 
-    let response: AzureResponse | AnthropicResponse | null;
-    if (provider === 'anthropic') {
-      response = await anthropic.chat(model, chatMessages, options);
-    } else if (isClaudeModel(model)) {
-      response = await azure.chatClaude(model, chatMessages, options);
-    } else {
-      response = await azure.chat(model, chatMessages, options);
-    }
+    const response: AzureResponse | null = await wynet.chat(model, chatMessages, options);
     const latencyMs = Date.now() - startMs;
 
     if (!response) {
-      throw httpError(502, `${provider} returned null response`, 'upstream_error');
+      logger.warn('WYNet gateway unreachable — falling back to local Ollama inference', { cloudIntent, model });
+
+      const fallbackModel = config.ollama.entryModel;
+      const localResponse = await ollama.chat(fallbackModel, chatMessages, options);
+
+      if (!localResponse) {
+        throw httpError(502, 'WYNet gateway and local Ollama fallback both failed', 'upstream_error');
+      }
+
+      return {
+        agent: AGENT_NAME,
+        model: fallbackModel,
+        intent: INTENT,
+        runtime: 'local_ollama_fallback',
+        content: localResponse.message?.content || '',
+        tokens: {
+          input: localResponse.prompt_eval_count || 0,
+          output: localResponse.eval_count || 0,
+        },
+        latency_ms: Date.now() - startMs,
+        cached: false,
+      };
     }
 
-    let content: string;
-    let tokens: TokenUsage;
-
-    if (useAnthropicShape) {
-      const anthResponse = response as AnthropicResponse;
-      content = anthResponse.content || '';
-      tokens = {
-        input: anthResponse.usage?.input_tokens || 0,
-        output: anthResponse.usage?.output_tokens || 0,
-      };
-    } else {
-      const azResponse = response as AzureResponse;
-      content = azResponse.choices?.[0]?.message?.content || '';
-      tokens = {
-        input: azResponse.usage?.prompt_tokens || 0,
-        output: azResponse.usage?.completion_tokens || 0,
-      };
-    }
+    const azResponse = response as AzureResponse;
+    const content = azResponse.choices?.[0]?.message?.content || '';
+    const tokens: TokenUsage = {
+      input: azResponse.usage?.prompt_tokens || 0,
+      output: azResponse.usage?.completion_tokens || 0,
+    };
 
     return {
       agent: AGENT_NAME,
       model,
       intent: INTENT,
-      runtime: `cloud_${provider}`,
+      runtime: 'cloud_wynet',
       content,
       tokens,
       latency_ms: latencyMs,
