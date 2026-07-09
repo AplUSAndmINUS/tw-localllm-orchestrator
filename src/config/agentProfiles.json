@@ -114,10 +114,10 @@
     },
     "SpeechAgent": {
       "agentName": "SpeechAgent",
-      "description": "Speech-to-text transcription with speaker diarization via Azure",
-      "runtime": "azure",
+      "description": "Speech-to-text transcription with speaker diarization via WYNet gateway",
+      "runtime": "cloud",
       "model": "gpt-4o-transcribe-diarize",
-      "endpoint": "${AZURE_OPENAI_ENDPOINT}",
+      "endpoint": "${WYNET_AI_GATEWAY_URL}",
       "capabilities": ["stt", "transcription", "speaker_diarization"],
       "costModel": "cloud_tracked"
     },
@@ -177,51 +177,51 @@
     },
     "CloudAgent": {
       "agentName": "CloudAgent",
-      "description": "Unified cloud routing for Azure and Anthropic models",
+      "description": "Unified cloud routing through WYNet AI Governance gateway",
       "runtime": "cloud",
-      "endpoint": "multi",
+      "endpoint": "${WYNET_AI_GATEWAY_URL}",
       "model": "dynamic",
       "capabilities": ["cloud_reasoning", "cloud_design", "cloud_cowork", "cloud_code"],
       "costModel": "cloud_tracked",
       "routes": {
         "heavy_reasoning": {
-          "provider": "azure",
+          "provider": "wynet",
           "model": "claude-opus-4-8"
         },
         "fallback_reasoning": {
-          "provider": "azure",
+          "provider": "wynet",
           "model": "gpt-4.1"
         },
         "vision": {
-          "provider": "azure",
+          "provider": "wynet",
           "model": "gpt-4o"
         },
         "design": {
-          "provider": "anthropic",
+          "provider": "wynet",
           "model": "claude-3-sonnet-20250514"
         },
         "cowork": {
-          "provider": "azure",
+          "provider": "wynet",
           "model": "claude-opus-4-8"
         },
         "major_code": {
-          "provider": "azure",
+          "provider": "wynet",
           "model": "claude-opus-4-8"
         },
         "creative": {
-          "provider": "anthropic",
+          "provider": "wynet",
           "model": "claude-3-haiku-20250307"
         },
         "mid_reasoning": {
-          "provider": "azure",
+          "provider": "wynet",
           "model": "Phi-4-reasoning"
         },
         "stt": {
-          "provider": "azure",
+          "provider": "wynet",
           "model": "gpt-4o-transcribe-diarize"
         },
         "tts": {
-          "provider": "azure",
+          "provider": "wynet",
           "model": "gpt-4o-mini-tts"
         }
       }

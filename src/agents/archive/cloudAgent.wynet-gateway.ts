@@ -1,9 +1,9 @@
-import * as wynet from '../cloud/wynet';
-import * as ollama from '../models/ollama';
-import logger from '../tools/logger';
-import httpError from '../tools/httpError';
-import config from '../config';
-import { AgentResponse, AgentMetadata, AgentExecuteParams, ChatMessage, Agent, CloudRoute, CloudRouteMap, AzureResponse, TokenUsage } from '../types';
+import * as wynet from '../../cloud/wynet';
+import * as ollama from '../../models/ollama';
+import logger from '../../tools/logger';
+import httpError from '../../tools/httpError';
+import config from '../../config';
+import { AgentResponse, AgentMetadata, AgentExecuteParams, ChatMessage, Agent, CloudRoute, CloudRouteMap, AzureResponse, TokenUsage } from '../../types';
 
 const AGENT_NAME = 'CloudAgent';
 const RUNTIME = 'cloud';
