@@ -1,6 +1,6 @@
 # tw-localllm-orchestrator
 
-> A personal, self-hosted LLM orchestrator. A TypeScript/Express server that classifies each request and routes it to the right backend — local (Ollama, LM Studio) or cloud (Azure, Anthropic) — with GPU-aware fallback and on-demand Docker container lifecycle management.
+> A personal, self-hosted LLM orchestrator. A TypeScript/Express server that classifies each request and routes it to the right backend — local (Ollama, LM Studio) or cloud (Azure, Anthropic) — with GPU-aware fallback and on-demand Docker container lifecycle management. This can be updated with any specific models relating to each area; just ensure that the correct Docker container is downloaded that matches your workflow! Also update the config with your preferred models. Enjoy!
 
 ---
 
